@@ -4,6 +4,7 @@ import { syncNextWorkflowMission } from './workflow.js';
 
 const defaultPublishAt = (project: Partial<VideoProject>): string => {
   if (typeof project.publishAt === 'string' && project.publishAt) return project.publishAt;
+  if (typeof project.deadline === 'string' && project.deadline.includes('T')) return project.deadline;
   const date = typeof project.deadline === 'string' && project.deadline ? project.deadline.slice(0, 10) : new Date().toISOString().slice(0, 10);
   return `${date}T19:00:00`;
 };
@@ -64,7 +65,6 @@ export const migrateWorkspace = (input: Workspace | Record<string, unknown>): Wo
     workdayEnd: source.settings?.workdayEnd ?? '18:00',
     defaultPublishTime: source.settings?.defaultPublishTime ?? '19:00',
   };
-  // Backfill task template kind after project format is known.
   source.calendarTasks = source.calendarTasks.map((task) => {
     const project = source.projects.find((candidate) => candidate.id === task.projectId);
     return {
