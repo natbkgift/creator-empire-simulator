@@ -5,6 +5,7 @@ export type RiskLevel = 'low' | 'review' | 'high' | 'blocked';
 export type FocusMode = 'portfolio' | 'channel';
 export type AutomationMode = 'manual' | 'automatic';
 export type AiProvider = 'openai' | 'gemini';
+export type GrowthLoopStatus = 'pending' | 'analytics' | 'repurpose' | 'complete';
 export type MissionRoute = 'mission' | 'prompts' | 'capcut' | 'policy' | 'analytics' | 'calendar' | 'production';
 export type ProjectStatus =
   | 'idea-backlog'
@@ -128,7 +129,7 @@ export interface SourceRecord {
 export interface WorkflowEvent {
   id: string;
   at: string;
-  type: 'focus' | 'mission-started' | 'mission-completed' | 'prompt-applied' | 'stage-advanced' | 'analytics-recorded';
+  type: 'focus' | 'mission-started' | 'mission-completed' | 'prompt-applied' | 'stage-advanced' | 'analytics-recorded' | 'production-completed' | 'rescheduled';
   note: string;
   fromStatus?: ProjectStatus;
   toStatus?: ProjectStatus;
@@ -147,6 +148,8 @@ export interface VideoProject {
   format: Exclude<VideoFormat, 'both'>;
   targetDurationSeconds: number;
   deadline: string;
+  /** Exact intended publication datetime in local project timezone (ISO string). */
+  publishAt: string;
   owner: string;
   estimatedMinutes: number;
   budgetThb: number;
@@ -154,6 +157,8 @@ export interface VideoProject {
   creditEstimateHigh: number;
   actualCredits: number;
   status: ProjectStatus;
+  productionCompletedAt?: string;
+  growthLoopStatus: GrowthLoopStatus;
   sourceIds: string[];
   researchSummary: string;
   factCheckSummary: string;
@@ -245,6 +250,9 @@ export interface CalendarTask {
   priority?: number;
   startedAt?: string;
   completedAt?: string;
+  templateKind?: 'shorts' | 'long' | 'manual' | 'growth';
+  conflict?: boolean;
+  conflictReason?: string;
   isDemo?: boolean;
 }
 
@@ -378,8 +386,18 @@ export interface Settings {
   connectedAiProxyUrl: string;
   sqliteStorageEnabled: boolean;
   activeChannelLimit: number;
+  aiMaxOutputTokens: number;
+  aiRequestTimeoutSeconds: number;
+  aiDailyBudgetUsd: number;
+  aiMonthlyBudgetUsd: number;
+  openAiInputUsdPer1M: number;
+  openAiOutputUsdPer1M: number;
+  geminiInputUsdPer1M: number;
+  geminiOutputUsdPer1M: number;
+  workdayStart: string;
+  workdayEnd: string;
+  defaultPublishTime: string;
 }
-
 
 export interface FocusState {
   mode: FocusMode;
@@ -390,7 +408,8 @@ export interface FocusState {
 }
 
 export interface Workspace {
-  schemaVersion: 3;
+  schemaVersion: 4;
+  revision: number;
   id: 'default';
   name: string;
   createdAt: string;
