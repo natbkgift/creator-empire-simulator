@@ -5,25 +5,31 @@ export interface NavigationItem {
   icon: string;
 }
 
+// v1.3 keeps only five persistent destinations. Prompt/CapCut/Policy/Simulator/etc.
+// remain valid contextual routes opened by the active project or an explicit action.
 export const navigation: NavigationItem[] = [
-  { route: 'hq', label: 'Studio HQ', shortLabel: 'HQ', icon: 'home' },
-  { route: 'mission', label: 'Video Mission Control', shortLabel: 'Mission', icon: 'target' },
-  { route: 'map', label: 'Portfolio Map', shortLabel: 'Map', icon: 'map' },
-  { route: 'ideas', label: 'Niche Observatory', shortLabel: 'Ideas', icon: 'idea' },
-  { route: 'blueprint', label: 'Channel Foundry', shortLabel: 'Plan', icon: 'blueprint' },
-  { route: 'production', label: 'Production Pipeline', shortLabel: 'Board', icon: 'board' },
-  { route: 'prompts', label: 'Prompt Studio', shortLabel: 'Prompt', icon: 'prompt' },
-  { route: 'capcut', label: 'CapCut Lab', shortLabel: 'CapCut', icon: 'capcut' },
-  { route: 'calendar', label: 'Publishing Tower', shortLabel: 'Calendar', icon: 'calendar' },
-  { route: 'simulator', label: 'YouTube Simulator', shortLabel: 'Sim', icon: 'simulator' },
-  { route: 'analytics', label: 'Analytics War Room', shortLabel: 'Data', icon: 'chart' },
-  { route: 'monetization', label: 'Monetization Vault', shortLabel: 'Money', icon: 'money' },
-  { route: 'policy', label: 'Policy Shield', shortLabel: 'Policy', icon: 'shield' },
-  { route: 'import-export', label: 'Import & Export', shortLabel: 'Files', icon: 'import' },
-  { route: 'settings', label: 'Settings', shortLabel: 'Settings', icon: 'gear' },
+  { route: 'hq', label: 'Today', shortLabel: 'Today', icon: 'home' },
+  { route: 'blueprint', label: 'Channels', shortLabel: 'Channels', icon: 'blueprint' },
+  { route: 'calendar', label: 'Calendar', shortLabel: 'Calendar', icon: 'calendar' },
+  { route: 'production', label: 'Production', shortLabel: 'Production', icon: 'board' },
+  { route: 'analytics', label: 'Insights', shortLabel: 'Insights', icon: 'chart' },
 ];
 
-export const primaryMobileNavigation = ['hq', 'mission', 'production', 'prompts', 'analytics'];
+export const primaryMobileNavigation = navigation.map((item) => item.route);
+
+const contextualRouteTitles: Record<string, string> = {
+  mission: 'Video Mission',
+  map: 'Portfolio',
+  ideas: 'Niche Ideas',
+  prompts: 'Prompt Studio',
+  capcut: 'CapCut Lab',
+  simulator: 'YouTube Simulator',
+  monetization: 'Monetization',
+  policy: 'Policy Shield',
+  'import-export': 'Backup & Recovery',
+  settings: 'Settings',
+  onboarding: 'Setup',
+};
 
 export const routeTitle = (route: string): string =>
-  navigation.find((item) => item.route === route)?.label ?? 'Creator Empire Simulator';
+  navigation.find((item) => item.route === route)?.label ?? contextualRouteTitles[route] ?? 'Creator Empire Simulator';
