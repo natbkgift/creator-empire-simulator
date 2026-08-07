@@ -1,0 +1,128 @@
+[
+  {
+    "screen": "hq",
+    "viewport": [
+      1600,
+      1000
+    ],
+    "errors": [],
+    "console_errors": [],
+    "metrics": {
+      "bodyText": 1759,
+      "bodyChildren": 2,
+      "appChildren": 1,
+      "scrollWidth": 1600,
+      "innerWidth": 1600,
+      "scrollHeight": 1000,
+      "innerHeight": 1000,
+      "h2": "Studio HQ",
+      "panelCount": 6
+    },
+    "path": "/mnt/data/creator-empire-simulator-phase-1/screenshots/hq.png"
+  },
+  {
+    "screen": "pipeline",
+    "viewport": [
+      1600,
+      1000
+    ],
+    "errors": [],
+    "console_errors": [],
+    "metrics": {
+      "bodyText": 1450,
+      "bodyChildren": 2,
+      "appChildren": 1,
+      "scrollWidth": 1600,
+      "innerWidth": 1600,
+      "scrollHeight": 1000,
+      "innerHeight": 1000,
+      "h2": "Production Pipeline",
+      "panelCount": 2
+    },
+    "path": "/mnt/data/creator-empire-simulator-phase-1/screenshots/pipeline.png"
+  },
+  {
+    "screen": "analytics",
+    "viewport": [
+      1600,
+      1000
+    ],
+    "errors": [],
+    "console_errors": [],
+    "metrics": {
+      "bodyText": 1147,
+      "bodyChildren": 2,
+      "appChildren": 1,
+      "scrollWidth": 1600,
+      "innerWidth": 1600,
+      "scrollHeight": 1000,
+      "innerHeight": 1000,
+      "h2": "Analytics War Room",
+      "panelCount": 4
+    },
+    "path": "/mnt/data/creator-empire-simulator-phase-1/screenshots/analytics.png"
+  },
+  {
+    "screen": "map",
+    "viewport": [
+      1600,
+      1000
+    ],
+    "errors": [],
+    "console_errors": [],
+    "metrics": {
+      "bodyText": 1162,
+      "bodyChildren": 2,
+      "appChildren": 1,
+      "scrollWidth": 1600,
+      "innerWidth": 1600,
+      "scrollHeight": 1000,
+      "innerHeight": 1000,
+      "h2": "Portfolio Map",
+      "panelCount": 3
+    },
+    "path": "/mnt/data/creator-empire-simulator-phase-1/screenshots/map.png"
+  },
+  {
+    "screen": "prompt",
+    "viewport": [
+      1600,
+      1000
+    ],
+    "errors": [],
+    "console_errors": [],
+    "metrics": {
+      "bodyText": 2315,
+      "bodyChildren": 2,
+      "appChildren": 1,
+      "scrollWidth": 1600,
+      "innerWidth": 1600,
+      "scrollHeight": 1000,
+      "innerHeight": 1000,
+      "h2": "Prompt Studio",
+      "panelCount": 3
+    },
+    "path": "/mnt/data/creator-empire-simulator-phase-1/screenshots/prompt.png"
+  },
+  {
+    "screen": "mobile",
+    "viewport": [
+      390,
+      844
+    ],
+    "errors": [],
+    "console_errors": [],
+    "metrics": {
+      "bodyText": 600,
+      "bodyChildren": 2,
+      "appChildren": 1,
+      "scrollWidth": 390,
+      "innerWidth": 390,
+      "scrollHeight": 844,
+      "innerHeight": 844,
+      "h2": "วันนี้ต้องปิดอะไร",
+      "panelCount": 0
+    },
+    "path": "/mnt/data/creator-empire-simulator-phase-1/screenshots/mobile.png"
+  }
+]

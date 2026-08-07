@@ -1,0 +1,15 @@
+
+.page-actions, .action-group, .form-actions, .dialog-actions, .file-actions, .mission-buttons { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Settings & files */.settings-form-panel,.connected-ai,.system-info,.privacy-panel,.export-panel,.import-panel,.demo-management,.storage-panel,.reset-panel,.migration-panel { padding: 20px; }.settings-form-panel label,.connected-ai label { margin-bottom: 10px; }.settings-side,.files-main,.files-side { display: grid; gap: 15px; align-content: start; }.connected-ai h2 { margin: 4px 0; font-size: 22px; }.connected-ai > p,.privacy-panel p,.storage-panel p,.reset-panel p,.migration-panel p,.demo-management p { color: var(--muted); font-size: 8px; line-height: 1.5; }.backup-preview { min-height: 90px; border: 1px solid var(--line); border-radius: 12px; display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 12px; padding: 12px; margin-bottom: 14px; }.backup-icon { width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center; color: var(--cyan); background: rgba(103,230,223,.07); border: 1px solid rgba(103,230,223,.18); font-family: monospace; }.backup-preview strong,.backup-preview small { display: block; }.backup-preview strong { font-size: 11px; }.backup-preview small { color: var(--muted); font-size: 8px; margin-top: 4px; }.file-actions { margin-top: 15px; }.drop-area { position: relative; min-height: 150px; border: 1px dashed var(--line-strong); border-radius: 13px; display: grid; place-items: center; align-content: center; text-align: center; background: rgba(7,16,27,.26); }.drop-area input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }.drop-area span { font-size: 11px; }.drop-area small { color: var(--muted); font-size: 8px; margin-top: 5px; }.import-panel #import-preview { margin-top: 12px; }@media (max-width: 1050px) {
+  .hq-side-stack,.capcut-side,.blueprint-side,.policy-side,.money-side,.settings-side,.files-side { grid-template-columns: repeat(2,minmax(0,1fr)); } }@media (max-width: 760px) {.hq-side-stack,.capcut-side,.blueprint-side,.policy-side,.money-side,.settings-side,.files-side,.map-side { grid-template-columns: 1fr; } }
+
+/* Settings / import / achievements */
+.settings-section { padding:16px; }
+.achievement-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px; }
+.achievement { border:1px solid var(--line);border-radius:10px;padding:10px;opacity:.5;display:grid;grid-template-columns:34px 1fr;gap:9px;align-items:center; }
+.achievement.unlocked { opacity:1;border-color:rgba(166,149,255,.33);background:rgba(166,149,255,.06); }
+.aicon { width:34px;height:34px;border-radius:10px;background:rgba(166,149,255,.12);color:var(--violet);display:grid;place-items:center; }
+.drop-zone { min-height:170px;border:1px dashed var(--line-strong);border-radius:13px;display:grid;place-items:center;align-content:center;text-align:center;padding:20px;color:var(--muted); }
+.drop-zone.drag-over { border-color:var(--cyan);background:rgba(103,230,223,.06); }
+.file-input { cursor:pointer; }

@@ -1,0 +1,1009 @@
+{
+  "release": "1.1.0",
+  "target": "http://127.0.0.1:4173",
+  "browser": "Playwright Python with system Chromium",
+  "desktopViewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "mobileViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "checks": [
+    {
+      "name": "Local app returns HTTP 200",
+      "passed": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "First screen is meaningful",
+      "passed": true,
+      "detail": "http://127.0.0.1:4173/#/onboarding"
+    },
+    {
+      "name": "Onboarding reaches Studio HQ",
+      "passed": true,
+      "detail": "http://127.0.0.1:4173/#/hq"
+    },
+    {
+      "name": "Default Channel Focus is History Lab",
+      "passed": true,
+      "detail": "channel_history_lab"
+    },
+    {
+      "name": "Default Active Project is Wojtek",
+      "passed": true,
+      "detail": "project_wojtek_short"
+    },
+    {
+      "name": "HQ exposes calendar-driven storyboard mission",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "HQ desktop has no document overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mission Control uses Script Approved as current stage",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mission Control targets Storyboard",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mission Control recommends storyboard",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mission Control desktop has no document overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Start Mission opens project-scoped Storyboard Prompt",
+      "passed": true,
+      "detail": "http://127.0.0.1:4173/#/prompts?project=project_wojtek_short&type=storyboard"
+    },
+    {
+      "name": "Prompt type is Storyboard",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Prompt project selector is scoped to focused channel",
+      "passed": true,
+      "detail": "['Wojtek: The Soldier Bear · Script Approved', 'Why Penicillin Was an Accident · Analytics Review']"
+    },
+    {
+      "name": "Storyboard JSON advances Pipeline",
+      "passed": true,
+      "detail": "http://127.0.0.1:4173/#/mission?project=project_wojtek_short&task=task_msinouv2_2x7gu72"
+    },
+    {
+      "name": "Next mission becomes visual asset prompts",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Project stage becomes Storyboard",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Next target becomes Assets Needed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Active Project persists after reload",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Pipeline stage persists after reload",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Calendar-driven next mission persists after reload",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Switching Channel Focus selects its project",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mission Context switches to FlowBiz AI",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Prompt Studio shows only AI-channel projects in Channel Focus",
+      "passed": true,
+      "detail": "['Automate One Boring Task: Lead Follow-up · Hook Ready']"
+    },
+    {
+      "name": "Pipeline recommends Shorts Script for AI project",
+      "passed": true,
+      "detail": "shorts-script"
+    },
+    {
+      "name": "Calendar contains an unlocked current mission",
+      "passed": true,
+      "detail": "unlocked=3"
+    },
+    {
+      "name": "Calendar locks future Pipeline missions",
+      "passed": true,
+      "detail": "locked=6"
+    },
+    {
+      "name": "Calendar remains scoped to FlowBiz AI",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Portfolio Mode is selectable globally",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Portfolio Prompt Studio exposes projects across channels",
+      "passed": true,
+      "detail": "['Wojtek: The Soldier Bear · Storyboard', 'Automate One Boring Task: Lead Follow-up · Hook Ready', 'Why Penicillin Was an Accident · Analytics Review']"
+    },
+    {
+      "name": "Channel and project can be refocused after Portfolio Mode",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Workspace export uses schema v2",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Workspace export preserves Channel/Project focus",
+      "passed": true,
+      "detail": "{'mode': 'channel', 'activeChannelId': 'channel_history_lab', 'activeProjectId': 'project_wojtek_short', 'updatedAt': '2026-08-07T08:01:41.936Z'}"
+    },
+    {
+      "name": "Workspace export preserves advanced Project stage",
+      "passed": true,
+      "detail": "storyboard"
+    },
+    {
+      "name": "Workspace export preserves workflow history",
+      "passed": true,
+      "detail": "events=4"
+    },
+    {
+      "name": "Ctrl+K opens Command Palette",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Desktop route hq renders named surface",
+      "passed": true,
+      "detail": "Studio HQ"
+    },
+    {
+      "name": "Desktop route hq has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route hq has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route mission renders named surface",
+      "passed": true,
+      "detail": "Video Mission Control"
+    },
+    {
+      "name": "Desktop route mission has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route mission has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route map renders named surface",
+      "passed": true,
+      "detail": "Portfolio Map"
+    },
+    {
+      "name": "Desktop route map has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route map has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route ideas renders named surface",
+      "passed": true,
+      "detail": "Niche Observatory"
+    },
+    {
+      "name": "Desktop route ideas has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route ideas has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route blueprint renders named surface",
+      "passed": true,
+      "detail": "Channel Foundry"
+    },
+    {
+      "name": "Desktop route blueprint has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route blueprint has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route production renders named surface",
+      "passed": true,
+      "detail": "Production Pipeline"
+    },
+    {
+      "name": "Desktop route production has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route production has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route prompts renders named surface",
+      "passed": true,
+      "detail": "Prompt Studio"
+    },
+    {
+      "name": "Desktop route prompts has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route prompts has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route capcut renders named surface",
+      "passed": true,
+      "detail": "CapCut Production Lab"
+    },
+    {
+      "name": "Desktop route capcut has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route capcut has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route calendar renders named surface",
+      "passed": true,
+      "detail": "Publishing Tower"
+    },
+    {
+      "name": "Desktop route calendar has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route calendar has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route simulator renders named surface",
+      "passed": true,
+      "detail": "YouTube Simulator"
+    },
+    {
+      "name": "Desktop route simulator has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route simulator has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route analytics renders named surface",
+      "passed": true,
+      "detail": "Analytics War Room"
+    },
+    {
+      "name": "Desktop route analytics has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route analytics has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route monetization renders named surface",
+      "passed": true,
+      "detail": "Monetization Vault"
+    },
+    {
+      "name": "Desktop route monetization has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route monetization has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route policy renders named surface",
+      "passed": true,
+      "detail": "Policy Shield"
+    },
+    {
+      "name": "Desktop route policy has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route policy has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route import-export renders named surface",
+      "passed": true,
+      "detail": "Import & Export"
+    },
+    {
+      "name": "Desktop route import-export has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route import-export has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Desktop route settings renders named surface",
+      "passed": true,
+      "detail": "Settings"
+    },
+    {
+      "name": "Desktop route settings has no document overflow",
+      "passed": true,
+      "detail": "1440/1440"
+    },
+    {
+      "name": "Desktop route settings has no unnamed visible button",
+      "passed": true,
+      "detail": "count=0"
+    },
+    {
+      "name": "Service worker controls the app after reload",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "PWA reloads Studio HQ offline",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Offline reload has no uncached critical request failure",
+      "passed": true,
+      "detail": "[]"
+    },
+    {
+      "name": "Mobile route hq renders named surface",
+      "passed": true,
+      "detail": "Studio HQ"
+    },
+    {
+      "name": "Mobile route hq has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route hq keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route mission renders named surface",
+      "passed": true,
+      "detail": "Video Mission Control"
+    },
+    {
+      "name": "Mobile route mission has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route mission keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route map renders named surface",
+      "passed": true,
+      "detail": "Portfolio Map"
+    },
+    {
+      "name": "Mobile route map has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route map keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route ideas renders named surface",
+      "passed": true,
+      "detail": "Niche Observatory"
+    },
+    {
+      "name": "Mobile route ideas has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route ideas keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route blueprint renders named surface",
+      "passed": true,
+      "detail": "Channel Foundry"
+    },
+    {
+      "name": "Mobile route blueprint has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route blueprint keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route production renders named surface",
+      "passed": true,
+      "detail": "Production Pipeline"
+    },
+    {
+      "name": "Mobile route production has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route production keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route prompts renders named surface",
+      "passed": true,
+      "detail": "Prompt Studio"
+    },
+    {
+      "name": "Mobile route prompts has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route prompts keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route capcut renders named surface",
+      "passed": true,
+      "detail": "CapCut Production Lab"
+    },
+    {
+      "name": "Mobile route capcut has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route capcut keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route calendar renders named surface",
+      "passed": true,
+      "detail": "Publishing Tower"
+    },
+    {
+      "name": "Mobile route calendar has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route calendar keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route simulator renders named surface",
+      "passed": true,
+      "detail": "YouTube Simulator"
+    },
+    {
+      "name": "Mobile route simulator has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route simulator keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route analytics renders named surface",
+      "passed": true,
+      "detail": "Analytics War Room"
+    },
+    {
+      "name": "Mobile route analytics has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route analytics keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route monetization renders named surface",
+      "passed": true,
+      "detail": "Monetization Vault"
+    },
+    {
+      "name": "Mobile route monetization has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route monetization keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route policy renders named surface",
+      "passed": true,
+      "detail": "Policy Shield"
+    },
+    {
+      "name": "Mobile route policy has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route policy keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route import-export renders named surface",
+      "passed": true,
+      "detail": "Import & Export"
+    },
+    {
+      "name": "Mobile route import-export has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route import-export keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Mobile route settings renders named surface",
+      "passed": true,
+      "detail": "Settings"
+    },
+    {
+      "name": "Mobile route settings has no document overflow",
+      "passed": true,
+      "detail": "390/390"
+    },
+    {
+      "name": "Mobile route settings keeps Focus bar visible",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "Browser console has zero errors",
+      "passed": true,
+      "detail": "[]"
+    },
+    {
+      "name": "Browser has zero page errors",
+      "passed": true,
+      "detail": "[]"
+    }
+  ],
+  "passed": 131,
+  "failed": 0,
+  "routeMatrix": [
+    {
+      "url": "http://127.0.0.1:4173/#/hq",
+      "title": "Studio HQ · Creator Empire Simulator",
+      "heading": "Studio HQ",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1037,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "hq"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/mission",
+      "title": "Video Mission Control · Creator Empire Simulator",
+      "heading": "Video Mission Control",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1448,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "mission"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/map",
+      "title": "Portfolio Map · Creator Empire Simulator",
+      "heading": "Portfolio Map",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1000,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "map"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/ideas",
+      "title": "Niche Observatory · Creator Empire Simulator",
+      "heading": "Niche Observatory",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 5073,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "ideas"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/blueprint",
+      "title": "Channel Foundry · Creator Empire Simulator",
+      "heading": "Channel Foundry",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 2199,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "blueprint"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/production",
+      "title": "Production Pipeline · Creator Empire Simulator",
+      "heading": "Production Pipeline",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1000,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "production"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/prompts",
+      "title": "Prompt Studio · Creator Empire Simulator",
+      "heading": "Prompt Studio",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1300,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "prompts"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/capcut",
+      "title": "CapCut Lab · Creator Empire Simulator",
+      "heading": "CapCut Production Lab",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1368,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "capcut"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/calendar",
+      "title": "Publishing Tower · Creator Empire Simulator",
+      "heading": "Publishing Tower",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1552,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "calendar"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/simulator",
+      "title": "YouTube Simulator · Creator Empire Simulator",
+      "heading": "YouTube Simulator",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1586,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "simulator"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/analytics",
+      "title": "Analytics War Room · Creator Empire Simulator",
+      "heading": "Analytics War Room",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 2300,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "analytics"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/monetization",
+      "title": "Monetization Vault · Creator Empire Simulator",
+      "heading": "Monetization Vault",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1255,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "monetization"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/policy",
+      "title": "Policy Shield · Creator Empire Simulator",
+      "heading": "Policy Shield",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1675,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "policy"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/import-export",
+      "title": "Import & Export · Creator Empire Simulator",
+      "heading": "Import & Export",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1000,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "import-export"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/settings",
+      "title": "Settings · Creator Empire Simulator",
+      "heading": "Settings",
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "scrollHeight": 1167,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "settings"
+    }
+  ],
+  "mobileMatrix": [
+    {
+      "url": "http://127.0.0.1:4173/#/hq",
+      "title": "Studio HQ · Creator Empire Simulator",
+      "heading": "Studio HQ",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 2261,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "hq"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/mission",
+      "title": "Video Mission Control · Creator Empire Simulator",
+      "heading": "Video Mission Control",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 2760,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "mission"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/map",
+      "title": "Portfolio Map · Creator Empire Simulator",
+      "heading": "Portfolio Map",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 1676,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "map"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/ideas",
+      "title": "Niche Observatory · Creator Empire Simulator",
+      "heading": "Niche Observatory",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 11221,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "ideas"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/blueprint",
+      "title": "Channel Foundry · Creator Empire Simulator",
+      "heading": "Channel Foundry",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 3909,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "blueprint"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/production",
+      "title": "Production Pipeline · Creator Empire Simulator",
+      "heading": "Production Pipeline",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 906,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "production"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/prompts",
+      "title": "Prompt Studio · Creator Empire Simulator",
+      "heading": "Prompt Studio",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 2343,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "prompts"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/capcut",
+      "title": "CapCut Lab · Creator Empire Simulator",
+      "heading": "CapCut Production Lab",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 2759,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "capcut"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/calendar",
+      "title": "Publishing Tower · Creator Empire Simulator",
+      "heading": "Publishing Tower",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 2452,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "calendar"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/simulator",
+      "title": "YouTube Simulator · Creator Empire Simulator",
+      "heading": "YouTube Simulator",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 3536,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "simulator"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/analytics",
+      "title": "Analytics War Room · Creator Empire Simulator",
+      "heading": "Analytics War Room",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 3905,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "analytics"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/monetization",
+      "title": "Monetization Vault · Creator Empire Simulator",
+      "heading": "Monetization Vault",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 2357,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "monetization"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/policy",
+      "title": "Policy Shield · Creator Empire Simulator",
+      "heading": "Policy Shield",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 3126,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "policy"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/import-export",
+      "title": "Import & Export · Creator Empire Simulator",
+      "heading": "Import & Export",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 1606,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "import-export"
+    },
+    {
+      "url": "http://127.0.0.1:4173/#/settings",
+      "title": "Settings · Creator Empire Simulator",
+      "heading": "Settings",
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "scrollHeight": 2116,
+      "fatal": false,
+      "visibleUnnamedButtons": 0,
+      "route": "settings"
+    }
+  ],
+  "consoleMessages": [],
+  "pageErrors": [],
+  "requestFailures": []
+}

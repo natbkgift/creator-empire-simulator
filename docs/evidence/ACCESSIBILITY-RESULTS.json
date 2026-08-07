@@ -1,0 +1,517 @@
+{
+  "routes": [
+    {
+      "route": "#/hq",
+      "lang": "th",
+      "main": 1,
+      "h1": "Studio HQ",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/map",
+      "lang": "th",
+      "main": 1,
+      "h1": "Portfolio Map",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/ideas",
+      "lang": "th",
+      "main": 1,
+      "h1": "Niche Observatory",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/blueprint",
+      "lang": "th",
+      "main": 1,
+      "h1": "Channel Foundry",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/production",
+      "lang": "th",
+      "main": 1,
+      "h1": "Production Pipeline",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/prompts",
+      "lang": "th",
+      "main": 1,
+      "h1": "Prompt Studio",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/capcut",
+      "lang": "th",
+      "main": 1,
+      "h1": "CapCut Production Lab",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/calendar",
+      "lang": "th",
+      "main": 1,
+      "h1": "Publishing Tower",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/simulator",
+      "lang": "th",
+      "main": 1,
+      "h1": "YouTube Simulator",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/analytics",
+      "lang": "th",
+      "main": 1,
+      "h1": "Analytics War Room",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/monetization",
+      "lang": "th",
+      "main": 1,
+      "h1": "Monetization Vault",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/policy",
+      "lang": "th",
+      "main": 1,
+      "h1": "Policy Shield",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/settings",
+      "lang": "th",
+      "main": 1,
+      "h1": "Settings",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    },
+    {
+      "route": "#/import-export",
+      "lang": "th",
+      "main": 1,
+      "h1": "Import & Export",
+      "buttons": 0,
+      "unlabeled": 0,
+      "duplicates": [],
+      "motion": 0
+    }
+  ],
+  "failures": [],
+  "checks": [
+    {
+      "name": "hq: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "hq: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "hq: named heading",
+      "status": "PASS",
+      "detail": "Studio HQ"
+    },
+    {
+      "name": "hq: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "hq: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "map: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "map: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "map: named heading",
+      "status": "PASS",
+      "detail": "Portfolio Map"
+    },
+    {
+      "name": "map: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "map: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "ideas: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "ideas: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "ideas: named heading",
+      "status": "PASS",
+      "detail": "Niche Observatory"
+    },
+    {
+      "name": "ideas: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "ideas: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "blueprint: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "blueprint: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "blueprint: named heading",
+      "status": "PASS",
+      "detail": "Channel Foundry"
+    },
+    {
+      "name": "blueprint: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "blueprint: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "production: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "production: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "production: named heading",
+      "status": "PASS",
+      "detail": "Production Pipeline"
+    },
+    {
+      "name": "production: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "production: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "prompts: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "prompts: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "prompts: named heading",
+      "status": "PASS",
+      "detail": "Prompt Studio"
+    },
+    {
+      "name": "prompts: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "prompts: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "capcut: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "capcut: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "capcut: named heading",
+      "status": "PASS",
+      "detail": "CapCut Production Lab"
+    },
+    {
+      "name": "capcut: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "capcut: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "calendar: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "calendar: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "calendar: named heading",
+      "status": "PASS",
+      "detail": "Publishing Tower"
+    },
+    {
+      "name": "calendar: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "calendar: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "simulator: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "simulator: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "simulator: named heading",
+      "status": "PASS",
+      "detail": "YouTube Simulator"
+    },
+    {
+      "name": "simulator: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "simulator: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "analytics: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "analytics: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "analytics: named heading",
+      "status": "PASS",
+      "detail": "Analytics War Room"
+    },
+    {
+      "name": "analytics: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "analytics: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "monetization: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "monetization: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "monetization: named heading",
+      "status": "PASS",
+      "detail": "Monetization Vault"
+    },
+    {
+      "name": "monetization: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "monetization: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "policy: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "policy: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "policy: named heading",
+      "status": "PASS",
+      "detail": "Policy Shield"
+    },
+    {
+      "name": "policy: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "policy: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "settings: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "settings: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "settings: named heading",
+      "status": "PASS",
+      "detail": "Settings"
+    },
+    {
+      "name": "settings: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "settings: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "import-export: language declared",
+      "status": "PASS",
+      "detail": "th"
+    },
+    {
+      "name": "import-export: main landmark",
+      "status": "PASS",
+      "detail": "1"
+    },
+    {
+      "name": "import-export: named heading",
+      "status": "PASS",
+      "detail": "Import & Export"
+    },
+    {
+      "name": "import-export: named buttons",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "import-export: duplicate ids",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "keyboard command palette opens",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "command palette receives focus",
+      "status": "PASS",
+      "detail": "INPUT:Idea, Channel, Project หรือห้องทำงาน"
+    },
+    {
+      "name": "reduced-motion removes long animations",
+      "status": "PASS",
+      "detail": "0"
+    },
+    {
+      "name": "console health",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

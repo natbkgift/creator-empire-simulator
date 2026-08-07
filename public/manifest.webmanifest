@@ -1,0 +1,13 @@
+{
+  "name": "Creator Empire Simulator",
+  "short_name": "Creator Empire",
+  "description": "Local-first creator studio for channel strategy, production, prompts, CapCut credits, calendar, analytics and simulation.",
+  "start_url": "./#/hq",
+  "display": "standalone",
+  "background_color": "#07101b",
+  "theme_color": "#07101b",
+  "lang": "th",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

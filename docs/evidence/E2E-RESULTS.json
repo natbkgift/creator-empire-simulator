@@ -1,0 +1,349 @@
+{
+  "checks": [
+    {
+      "name": "page identity onboarding",
+      "status": "PASS",
+      "detail": "Creator Empire · Creator Empire Simulator"
+    },
+    {
+      "name": "onboarding not blank",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "onboarding to HQ",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "create channel from idea",
+      "status": "PASS",
+      "detail": "E2E History Engine"
+    },
+    {
+      "name": "channel persists after reload",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "create video project",
+      "status": "PASS",
+      "detail": "project_mshn9r8w_ip36k0y"
+    },
+    {
+      "name": "keyboard pipeline move",
+      "status": "PASS",
+      "detail": "Idea Backlog -> Selected"
+    },
+    {
+      "name": "prompt generated from project context",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "copy prompt",
+      "status": "PASS",
+      "detail": "1536 chars"
+    },
+    {
+      "name": "parse structured AI response",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "CapCut ledger updates balance",
+      "status": "PASS",
+      "detail": "1600"
+    },
+    {
+      "name": "calendar task created",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "ICS export",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "actual analytics saved",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "90-day simulator run",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "workspace export channel",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "workspace export project",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "workspace export prompt",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "workspace export credit ledger",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "workspace export calendar",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "workspace export analytics",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "workspace export simulation",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "workspace persists after reload",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "route hq renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/hq\", \"title\": \"Studio HQ · Creator Empire Simulator\", \"text\": 1792, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Studio HQ\"}"
+    },
+    {
+      "name": "route map renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/map\", \"title\": \"Portfolio Map · Creator Empire Simulator\", \"text\": 1000, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Portfolio Map\"}"
+    },
+    {
+      "name": "route ideas renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/ideas\", \"title\": \"Niche Observatory · Creator Empire Simulator\", \"text\": 11564, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Niche Observatory\"}"
+    },
+    {
+      "name": "route blueprint renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/blueprint\", \"title\": \"Channel Foundry · Creator Empire Simulator\", \"text\": 4416, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Channel Foundry\"}"
+    },
+    {
+      "name": "route production renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/production\", \"title\": \"Production Pipeline · Creator Empire Simulator\", \"text\": 1519, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Production Pipeline\"}"
+    },
+    {
+      "name": "route prompts renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/prompts\", \"title\": \"Prompt Studio · Creator Empire Simulator\", \"text\": 1649, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Prompt Studio\"}"
+    },
+    {
+      "name": "route capcut renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/capcut\", \"title\": \"CapCut Lab · Creator Empire Simulator\", \"text\": 1695, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"CapCut Production Lab\"}"
+    },
+    {
+      "name": "route calendar renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/calendar\", \"title\": \"Publishing Tower · Creator Empire Simulator\", \"text\": 1885, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Publishing Tower\"}"
+    },
+    {
+      "name": "route simulator renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/simulator\", \"title\": \"YouTube Simulator · Creator Empire Simulator\", \"text\": 2328, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"YouTube Simulator\"}"
+    },
+    {
+      "name": "route analytics renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/analytics\", \"title\": \"Analytics War Room · Creator Empire Simulator\", \"text\": 2465, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Analytics War Room\"}"
+    },
+    {
+      "name": "route monetization renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/monetization\", \"title\": \"Monetization Vault · Creator Empire Simulator\", \"text\": 1847, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Monetization Vault\"}"
+    },
+    {
+      "name": "route policy renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/policy\", \"title\": \"Policy Shield · Creator Empire Simulator\", \"text\": 4200, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Policy Shield\"}"
+    },
+    {
+      "name": "route settings renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/settings\", \"title\": \"Settings · Creator Empire Simulator\", \"text\": 1618, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Settings\"}"
+    },
+    {
+      "name": "route import-export renders",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/import-export\", \"title\": \"Import & Export · Creator Empire Simulator\", \"text\": 1258, \"scrollWidth\": 1600, \"clientWidth\": 1600, \"h1\": \"Import & Export\"}"
+    },
+    {
+      "name": "mobile hq viewport",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/hq\", \"scrollWidth\": 390, \"clientWidth\": 390, \"text\": 1599}"
+    },
+    {
+      "name": "mobile production viewport",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/production\", \"scrollWidth\": 390, \"clientWidth\": 390, \"text\": 1379}"
+    },
+    {
+      "name": "mobile ideas viewport",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/ideas\", \"scrollWidth\": 390, \"clientWidth\": 390, \"text\": 11424}"
+    },
+    {
+      "name": "mobile prompts viewport",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/prompts\", \"scrollWidth\": 390, \"clientWidth\": 390, \"text\": 1509}"
+    },
+    {
+      "name": "mobile analytics viewport",
+      "status": "PASS",
+      "detail": "{\"route\": \"#/analytics\", \"scrollWidth\": 390, \"clientWidth\": 390, \"text\": 2325}"
+    },
+    {
+      "name": "workspace import into fresh profile",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "PWA offline shell",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "name": "console and page errors",
+      "status": "PASS",
+      "detail": ""
+    }
+  ],
+  "errors": [],
+  "warnings": [],
+  "downloads": {
+    "ics": "e2e-calendar.ics",
+    "workspace": "e2e-workspace.json"
+  },
+  "routes": [
+    {
+      "route": "#/hq",
+      "title": "Studio HQ · Creator Empire Simulator",
+      "text": 1792,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Studio HQ"
+    },
+    {
+      "route": "#/map",
+      "title": "Portfolio Map · Creator Empire Simulator",
+      "text": 1000,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Portfolio Map"
+    },
+    {
+      "route": "#/ideas",
+      "title": "Niche Observatory · Creator Empire Simulator",
+      "text": 11564,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Niche Observatory"
+    },
+    {
+      "route": "#/blueprint",
+      "title": "Channel Foundry · Creator Empire Simulator",
+      "text": 4416,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Channel Foundry"
+    },
+    {
+      "route": "#/production",
+      "title": "Production Pipeline · Creator Empire Simulator",
+      "text": 1519,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Production Pipeline"
+    },
+    {
+      "route": "#/prompts",
+      "title": "Prompt Studio · Creator Empire Simulator",
+      "text": 1649,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Prompt Studio"
+    },
+    {
+      "route": "#/capcut",
+      "title": "CapCut Lab · Creator Empire Simulator",
+      "text": 1695,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "CapCut Production Lab"
+    },
+    {
+      "route": "#/calendar",
+      "title": "Publishing Tower · Creator Empire Simulator",
+      "text": 1885,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Publishing Tower"
+    },
+    {
+      "route": "#/simulator",
+      "title": "YouTube Simulator · Creator Empire Simulator",
+      "text": 2328,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "YouTube Simulator"
+    },
+    {
+      "route": "#/analytics",
+      "title": "Analytics War Room · Creator Empire Simulator",
+      "text": 2465,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Analytics War Room"
+    },
+    {
+      "route": "#/monetization",
+      "title": "Monetization Vault · Creator Empire Simulator",
+      "text": 1847,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Monetization Vault"
+    },
+    {
+      "route": "#/policy",
+      "title": "Policy Shield · Creator Empire Simulator",
+      "text": 4200,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Policy Shield"
+    },
+    {
+      "route": "#/settings",
+      "title": "Settings · Creator Empire Simulator",
+      "text": 1618,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Settings"
+    },
+    {
+      "route": "#/import-export",
+      "title": "Import & Export · Creator Empire Simulator",
+      "text": 1258,
+      "scrollWidth": 1600,
+      "clientWidth": 1600,
+      "h1": "Import & Export"
+    }
+  ]
+}

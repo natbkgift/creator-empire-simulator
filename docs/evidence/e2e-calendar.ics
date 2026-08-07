@@ -1,0 +1,62 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//FlowBiz//Creator Empire Simulator//TH
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:task_factcheck@creator-empire.local
+DTSTAMP:20260806T150208Z
+DTSTART;TZID=Asia/Bangkok:20260806T090000
+DTEND;TZID=Asia/Bangkok:20260806T093500
+SUMMARY:Fact-check Wojtek claims
+DESCRIPTION:Creator Empire · research · Project project_wojtek_short
+END:VEVENT
+BEGIN:VEVENT
+UID:task_storyboard@creator-empire.local
+DTSTAMP:20260806T150208Z
+DTSTART;TZID=Asia/Bangkok:20260806T100000
+DTEND;TZID=Asia/Bangkok:20260806T103000
+SUMMARY:Lock Wojtek shot list
+DESCRIPTION:Creator Empire · script · Project project_wojtek_short
+END:VEVENT
+BEGIN:VEVENT
+UID:task_ai_hook@creator-empire.local
+DTSTAMP:20260806T150208Z
+DTSTART;TZID=Asia/Bangkok:20260807T093000
+DTEND;TZID=Asia/Bangkok:20260807T095500
+SUMMARY:Test 3 AI lead follow-up hooks
+DESCRIPTION:Creator Empire · script · Project project_ai_boring_task
+END:VEVENT
+BEGIN:VEVENT
+UID:task_analytics@creator-empire.local
+DTSTAMP:20260806T150208Z
+DTSTART;TZID=Asia/Bangkok:20260808T100000
+DTEND;TZID=Asia/Bangkok:20260808T103000
+SUMMARY:Post-mortem: Penicillin Short
+DESCRIPTION:Creator Empire · analytics · Project project_penicillin
+END:VEVENT
+BEGIN:VEVENT
+UID:task_batch@creator-empire.local
+DTSTAMP:20260806T150208Z
+DTSTART;TZID=Asia/Bangkok:20260809T090000
+DTEND;TZID=Asia/Bangkok:20260809T113000
+SUMMARY:Batch production block
+DESCRIPTION:Creator Empire · editing
+END:VEVENT
+BEGIN:VEVENT
+UID:task_rest@creator-empire.local
+DTSTAMP:20260806T150208Z
+DTSTART;TZID=Asia/Bangkok:20260811T100000
+DTEND;TZID=Asia/Bangkok:20260811T110000
+SUMMARY:Buffer / rest
+DESCRIPTION:Creator Empire · rest
+END:VEVENT
+BEGIN:VEVENT
+UID:task_mshn9sd3_v2rhivy@creator-empire.local
+DTSTAMP:20260806T150208Z
+DTSTART;TZID=Asia/Bangkok:20260806T090000
+DTEND;TZID=Asia/Bangkok:20260806T094500
+SUMMARY:E2E Publish Review
+DESCRIPTION:Creator Empire · analytics · Project project_mshn9r8w_ip36k0y
+END:VEVENT
+END:VCALENDAR

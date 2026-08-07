@@ -1,0 +1,72 @@
+{
+  "firstLoadWallMs": 632.3,
+  "navigation": {
+    "domContentLoaded": 68.70000000018626,
+    "loadEvent": 68.79999999981374,
+    "resources": 39,
+    "transferBytes": 390590,
+    "decodedBytes": 378890
+  },
+  "routeLoads": [
+    {
+      "route": "hq",
+      "wallMs": 15.1
+    },
+    {
+      "route": "ideas",
+      "wallMs": 6.8
+    },
+    {
+      "route": "production",
+      "wallMs": 53.8
+    },
+    {
+      "route": "prompts",
+      "wallMs": 44.0
+    },
+    {
+      "route": "analytics",
+      "wallMs": 19.4
+    },
+    {
+      "route": "calendar",
+      "wallMs": 11.1
+    },
+    {
+      "route": "simulator",
+      "wallMs": 21.7
+    }
+  ],
+  "medianRouteWallMs": 19.4,
+  "domCounts": [
+    {
+      "route": "hq",
+      "elements": 335
+    },
+    {
+      "route": "ideas",
+      "elements": 903
+    },
+    {
+      "route": "production",
+      "elements": 337
+    },
+    {
+      "route": "prompts",
+      "elements": 306
+    },
+    {
+      "route": "analytics",
+      "elements": 429
+    },
+    {
+      "route": "calendar",
+      "elements": 309
+    },
+    {
+      "route": "simulator",
+      "elements": 314
+    }
+  ],
+  "consoleErrors": 0
+}

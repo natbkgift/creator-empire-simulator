@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Production build output
+dist/
+
+# Python cache & virtualenv
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# SQLite databases & local data
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.local

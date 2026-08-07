@@ -1,0 +1,138 @@
+import assert from 'node:assert/strict';
+import {
+  button,
+  chip,
+  dataBadge,
+  dataLabel,
+  emptyPanel,
+  emptyState,
+  iconButton,
+  languageName,
+  metric,
+  metricCard,
+  moneyOrDash,
+  numberOrDash,
+  pageHeader,
+  progress,
+  riskChip,
+  sectionHeading,
+  selectOptions,
+} from '../dist/src/ui/components.js';
+import { createSeedWorkspace } from '../dist/src/seed/demo.js';
+import { renderShell } from '../dist/src/app/shell.js';
+
+const tests = [];
+const test = (name, fn) => tests.push({ name, fn });
+
+test('chip renders text with escaped HTML and optional tone class', () => {
+  assert.equal(chip('Test', 'green'), '<span class="chip green">Test</span>');
+  assert.equal(chip('<script>alert("xss")</script>'), '<span class="chip ">&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;</span>');
+});
+
+test('dataLabel and dataBadge return correct demo/estimated/actual badges', () => {
+  assert.equal(dataLabel('demo'), '<span class="data-label demo">demo</span>');
+  assert.equal(dataBadge(true), '<span class="data-label demo">demo</span>');
+  assert.equal(dataBadge(false, true), '<span class="data-label estimated">estimated</span>');
+  assert.equal(dataBadge(false, false), '<span class="data-label actual">actual</span>');
+});
+
+test('riskChip maps risk levels to appropriate classes and labels', () => {
+  assert.ok(riskChip('low').includes('green') && riskChip('low').includes('Low'));
+  assert.ok(riskChip('review').includes('amber') && riskChip('review').includes('Review'));
+  assert.ok(riskChip('high').includes('red') && riskChip('high').includes('High'));
+  assert.ok(riskChip('blocked').includes('red') && riskChip('blocked').includes('Blocked'));
+});
+
+test('metricCard and metric render structured values with escaping', () => {
+  assert.equal(metricCard(100, 'Total Views'), '<div class="metric-card "><b>100</b><span>Total Views</span></div>');
+  assert.equal(
+    metric('Views', 5000, '+10% past week', 'violet'),
+    '<div class="metric violet"><span>Views</span><strong>5000</strong><small>+10% past week</small></div>',
+  );
+});
+
+test('progress bar handles clamped percentages and custom labels', () => {
+  assert.ok(progress(50).includes('--value:50%'));
+  assert.ok(progress(-10).includes('--value:0%'));
+  assert.ok(progress(150).includes('--value:100%'));
+  assert.ok(progress(75, 'Progress 75%').includes('Progress 75%'));
+});
+
+test('pageHeader renders title, subtitle, eyebrow, and actions', () => {
+  const html = pageHeader('Mission Control', 'Execute tasks', '<button>Do</button>', 'WORKSPACE');
+  assert.ok(html.includes('Mission Control'));
+  assert.ok(html.includes('Execute tasks'));
+  assert.ok(html.includes('WORKSPACE'));
+  assert.ok(html.includes('<button>Do</button>'));
+});
+
+test('sectionHeading renders title, optional subtitle, and right elements', () => {
+  const html = sectionHeading('Active Channels', 'Overview of channels', '<span>2 active</span>');
+  assert.ok(html.includes('Active Channels'));
+  assert.ok(html.includes('Overview of channels'));
+  assert.ok(html.includes('2 active'));
+});
+
+test('button and iconButton format actions and parameters', () => {
+  const btn = button('Create', 'create-channel', { tone: 'primary', iconName: 'plus' });
+  assert.ok(btn.includes('data-action="create-channel"'));
+  assert.ok(btn.includes('class="btn primary"'));
+  assert.ok(btn.includes('Create'));
+
+  const iconBtn = iconButton('Delete item', 'delete-item', 'trash');
+  assert.ok(iconBtn.includes('data-action="delete-item"'));
+  assert.ok(iconBtn.includes('aria-label="Delete item"'));
+});
+
+test('selectOptions maps option array and marks selected option', () => {
+  const options = [
+    { value: 'en', label: 'English' },
+    { value: 'th', label: 'Thai' },
+  ];
+  const html = selectOptions(options, 'th');
+  assert.ok(html.includes('<option value="en" >English</option>'));
+  assert.ok(html.includes('<option value="th" selected>Thai</option>'));
+});
+
+test('languageName, numberOrDash, moneyOrDash formatting helpers', () => {
+  assert.equal(languageName('en'), 'English');
+  assert.equal(languageName('th'), 'ไทย');
+
+  assert.equal(numberOrDash(NaN), '—');
+  assert.equal(numberOrDash(1234), '1,234');
+
+  assert.equal(moneyOrDash(NaN), '—');
+  assert.ok(moneyOrDash(500).includes('500'));
+});
+
+test('emptyState and emptyPanel render container with title and detail', () => {
+  const html = emptyState('No data', 'Please add an entry', '<button>Add</button>');
+  assert.ok(html.includes('No data'));
+  assert.ok(html.includes('Please add an entry'));
+  assert.ok(html.includes('<button>Add</button>'));
+  assert.equal(emptyState, emptyPanel);
+});
+
+test('renderShell builds full application layout with topbar and nav rail', () => {
+  const workspace = createSeedWorkspace();
+  const html = renderShell(workspace, 'hq', '<main id="hq-view">HQ Content</main>');
+
+  assert.ok(html.includes('app-shell'));
+  assert.ok(html.includes('HQ Content'));
+  assert.ok(html.includes('topbar'));
+  assert.ok(html.includes('Creator Empire'));
+});
+
+let passed = 0;
+for (const t of tests) {
+  try {
+    t.fn();
+    passed += 1;
+    console.log(`PASS ${t.name}`);
+  } catch (error) {
+    console.error(`FAIL ${t.name}`);
+    console.error(error);
+    process.exitCode = 1;
+  }
+}
+console.log(`\n${passed}/${tests.length} UI component tests passed.`);

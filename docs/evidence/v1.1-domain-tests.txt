@@ -1,0 +1,36 @@
+
+> creator-empire-simulator@1.1.0 test
+> npm run build && node tests/domain-tests.mjs
+
+
+> creator-empire-simulator@1.1.0 build
+> npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs
+
+
+> creator-empire-simulator@1.1.0 clean
+> node scripts/clean.mjs
+
+PASS seed library contains 5 categories and 50 ideas
+PASS all language scores stay in valid ranges
+PASS weighted scoring is deterministic
+PASS language comparison selects a valid winner
+PASS channel blueprint contains production-ready sections
+PASS all 16 prompt workflows are present and context-aware
+PASS CapCut mode recommends control for factual content and Director for product-led content
+PASS simulator is deterministic and always exposes four scenarios and assumptions
+PASS workspace and prompt JSON validation reject malformed input
+PASS seed workspace is schema v2 and starts in a valid channel/project focus
+PASS Channel Focus scopes projects and tasks to the selected channel
+PASS choosing an Active Project automatically switches to its owning channel
+PASS Portfolio Focus exposes projects from every channel without losing the active project
+PASS workflow contains the exact 17 ordered production stages
+PASS pipeline recommendation maps Script Approved to the Storyboard Prompt Studio mission
+PASS workflow task builder creates the remaining stage plan and locks future stages
+PASS rebuilding a workflow replaces only the project auto-generated plan
+PASS Sources Verified completion gate blocks missing evidence then passes with research, source and fact-check
+PASS prompt completion types map to the stage they are allowed to complete
+PASS syncing the next mission completes past tasks and returns the exact current-stage task
+PASS schema v1 migration adds focus, workflow artifact fields and a current mission
+PASS CapCut Draft cannot advance to Editing until a real ledger entry exists
+
+22/22 domain tests passed.

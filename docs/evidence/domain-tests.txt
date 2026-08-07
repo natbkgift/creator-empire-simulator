@@ -1,0 +1,23 @@
+
+> creator-empire-simulator@1.0.0 test
+> npm run build && node tests/domain-tests.mjs
+
+
+> creator-empire-simulator@1.0.0 build
+> npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs
+
+
+> creator-empire-simulator@1.0.0 clean
+> node scripts/clean.mjs
+
+PASS seed library contains 5 categories and 50 ideas
+PASS all language scores stay in valid ranges
+PASS weighted scoring is deterministic
+PASS language comparison selects a valid winner
+PASS channel blueprint contains production-ready sections
+PASS all 16 prompt workflows are present and context-aware
+PASS CapCut mode recommends control for factual content and Director for product-led content
+PASS simulator is deterministic and always exposes four scenarios and assumptions
+PASS workspace and prompt JSON validation reject malformed input
+
+9/9 domain tests passed.
