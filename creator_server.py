@@ -45,8 +45,16 @@ def checksum_json(value: Any) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def checksum_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def column_names(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(row[1]) for row in conn.execute(f"pragma table_info({table})").fetchall()}
+
+
+def table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    return conn.execute("select 1 from sqlite_master where type='table' and name=?", (table,)).fetchone() is not None
 
 
 def ensure_column(conn: sqlite3.Connection, table: str, name: str, declaration: str) -> None:
@@ -56,10 +64,12 @@ def ensure_column(conn: sqlite3.Connection, table: str, name: str, declaration: 
 
 def ensure_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    legacy_secret_table = False
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("pragma journal_mode=wal")
         conn.execute("pragma synchronous=full")
         conn.execute("pragma foreign_keys=on")
+        conn.execute("pragma secure_delete=on")
         conn.execute("""
         create table if not exists workspace (
           id text primary key,
@@ -104,9 +114,20 @@ def ensure_db() -> None:
             ("estimated_cost_usd", "real not null default 0"),
         ):
             ensure_column(conn, "ai_runs", name, decl)
-        # v1.2 persisted plaintext keys here. Remove that storage contract entirely.
-        conn.execute("drop table if exists ai_secrets")
+        # v1.2 persisted plaintext provider keys. Secure-delete rows before removing the table.
+        legacy_secret_table = table_exists(conn, "ai_secrets")
+        if legacy_secret_table:
+            conn.execute("delete from ai_secrets")
+            conn.execute("drop table ai_secrets")
         conn.commit()
+
+    # Repack the database and truncate WAL only when a legacy plaintext-secret table existed.
+    # This makes the v1.2 -> v1.3 migration actively remove recoverable free-page copies.
+    if legacy_secret_table:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("pragma secure_delete=on")
+            conn.execute("vacuum")
+            conn.execute("pragma wal_checkpoint(truncate)")
 
 
 def json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]) -> None:
@@ -115,6 +136,7 @@ def json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[st
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Content-Type-Options", "nosniff")
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -137,6 +159,20 @@ def workspace_row(conn: sqlite3.Connection) -> tuple[Any, ...] | None:
     return conn.execute(
         "select data, schema_version, revision, checksum, updated_at from workspace where id='default'"
     ).fetchone()
+
+
+def verified_workspace_from_row(row: tuple[Any, ...] | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    data = str(row[0])
+    expected = str(row[3] or "")
+    if expected and checksum_text(data) != expected:
+        raise RuntimeError("Workspace checksum mismatch. Use IndexedDB reconciliation or recovery history.")
+    workspace = json.loads(data)
+    if not isinstance(workspace, dict):
+        raise RuntimeError("Workspace row is not a JSON object")
+    workspace["revision"] = int(row[2])
+    return workspace
 
 
 def db_storage_meta() -> dict[str, Any]:
@@ -167,6 +203,7 @@ def save_workspace(payload: dict[str, Any]) -> dict[str, Any]:
     updated_at = now_iso()
     with sqlite3.connect(DB_PATH, timeout=10) as conn:
         conn.execute("pragma foreign_keys=on")
+        conn.execute("pragma synchronous=full")
         conn.execute("begin immediate")
         row = workspace_row(conn)
         current_revision = int(row[2]) if row else 0
@@ -175,11 +212,12 @@ def save_workspace(payload: dict[str, Any]) -> dict[str, Any]:
         workspace["revision"] = revision
         workspace["updatedAt"] = workspace.get("updatedAt") or updated_at
         data = canonical_json(workspace)
-        digest = hashlib.sha256(data.encode("utf-8")).hexdigest()
+        digest = checksum_text(data)
         if row:
+            previous_checksum = str(row[3] or checksum_text(str(row[0])))
             conn.execute(
                 "insert or ignore into workspace_history(workspace_id,revision,checksum,data,created_at) values(?,?,?,?,?)",
-                ("default", current_revision, str(row[3] or checksum_json(json.loads(row[0]))), row[0], row[4]),
+                ("default", current_revision, previous_checksum, row[0], row[4]),
             )
         conn.execute(
             "insert into workspace(id,data,schema_version,revision,checksum,updated_at) values(?,?,?,?,?,?) "
@@ -199,10 +237,7 @@ def save_workspace(payload: dict[str, Any]) -> dict[str, Any]:
 def load_workspace() -> dict[str, Any]:
     with sqlite3.connect(DB_PATH) as conn:
         row = workspace_row(conn)
-    workspace = json.loads(row[0]) if row else None
-    if isinstance(workspace, dict) and row:
-        workspace["revision"] = int(row[2])
-    return {"workspace": workspace, "storage": db_storage_meta()}
+    return {"workspace": verified_workspace_from_row(row), "storage": db_storage_meta()}
 
 
 def list_history() -> dict[str, Any]:
@@ -221,24 +256,29 @@ def list_history() -> dict[str, Any]:
 def restore_revision(payload: dict[str, Any]) -> dict[str, Any]:
     revision = int(payload.get("revision", -1))
     with sqlite3.connect(DB_PATH, timeout=10) as conn:
+        conn.execute("pragma synchronous=full")
         conn.execute("begin immediate")
         row = conn.execute(
-            "select data from workspace_history where workspace_id='default' and revision=?", (revision,)
+            "select data,checksum from workspace_history where workspace_id='default' and revision=?", (revision,)
         ).fetchone()
         if not row:
             raise ValueError("Revision not found")
-        workspace = json.loads(row[0])
+        data_from_history = str(row[0])
+        history_checksum = str(row[1] or "")
+        if history_checksum and checksum_text(data_from_history) != history_checksum:
+            raise RuntimeError("Recovery snapshot checksum mismatch")
+        workspace = json.loads(data_from_history)
         current = workspace_row(conn)
         current_revision = int(current[2]) if current else revision
         new_revision = current_revision + 1
         workspace["revision"] = new_revision
         workspace["updatedAt"] = now_iso()
         data = canonical_json(workspace)
-        digest = hashlib.sha256(data.encode("utf-8")).hexdigest()
+        digest = checksum_text(data)
         if current:
             conn.execute(
                 "insert or ignore into workspace_history(workspace_id,revision,checksum,data,created_at) values(?,?,?,?,?)",
-                ("default", current_revision, current[3], current[0], current[4]),
+                ("default", current_revision, current[3] or checksum_text(str(current[0])), current[0], current[4]),
             )
         conn.execute(
             "insert into workspace(id,data,schema_version,revision,checksum,updated_at) values(?,?,?,?,?,?) "
@@ -340,16 +380,25 @@ def ai_spend(period: str) -> float:
     return float(row[0] or 0)
 
 
-def estimate_cost(provider: str, input_tokens: int, output_tokens: int, settings: dict[str, Any]) -> float:
+def provider_rates(provider: str, settings: dict[str, Any]) -> tuple[float, float]:
     prefix = "openAi" if provider == "openai" else "gemini"
-    input_rate = numeric_setting(settings, f"{prefix}InputUsdPer1M", 0, 0, 1000)
-    output_rate = numeric_setting(settings, f"{prefix}OutputUsdPer1M", 0, 0, 1000)
+    return (
+        numeric_setting(settings, f"{prefix}InputUsdPer1M", 0, 0, 1000),
+        numeric_setting(settings, f"{prefix}OutputUsdPer1M", 0, 0, 1000),
+    )
+
+
+def estimate_cost(provider: str, input_tokens: int, output_tokens: int, settings: dict[str, Any]) -> float:
+    input_rate, output_rate = provider_rates(provider, settings)
     return (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
 
 
-def enforce_budget(settings: dict[str, Any]) -> None:
+def enforce_budget(provider: str, settings: dict[str, Any]) -> None:
     daily = numeric_setting(settings, "aiDailyBudgetUsd", 2.0, 0, 10_000)
     monthly = numeric_setting(settings, "aiMonthlyBudgetUsd", 20.0, 0, 100_000)
+    input_rate, output_rate = provider_rates(provider, settings)
+    if (daily or monthly) and input_rate <= 0 and output_rate <= 0:
+        raise RuntimeError(f"Configure current {provider} input/output USD per 1M token rates before enabling cost-capped AI Assisted mode")
     if daily and ai_spend("day") >= daily:
         raise RuntimeError(f"Daily AI budget reached (${daily:.2f})")
     if monthly and ai_spend("month") >= monthly:
@@ -369,12 +418,13 @@ def post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeou
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            last_error = RuntimeError(f"HTTP {exc.code}: {body[:500]}")
+            # Do not persist provider response bodies: they may echo user content.
+            exc.read()
+            last_error = RuntimeError(f"Provider HTTP {exc.code}: request rejected")
             if exc.code not in {408, 409, 429, 500, 502, 503, 504} or attempt == attempts - 1:
                 raise last_error from exc
         except (urllib.error.URLError, TimeoutError) as exc:
-            last_error = RuntimeError(f"Network error: {exc}")
+            last_error = RuntimeError(f"Network error: {type(exc).__name__}")
             if attempt == attempts - 1:
                 raise last_error from exc
         time.sleep(0.5 * (2**attempt))
@@ -438,7 +488,7 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
     if not prompt:
         raise ValueError("prompt is required")
     settings = load_settings()
-    enforce_budget(settings)
+    enforce_budget(provider, settings)
     api_key, key_source = provider_key(provider)
     default_model = str(settings.get("openAiModel" if provider == "openai" else "geminiModel") or "").strip()
     model = str(payload.get("model") or default_model).strip()
@@ -479,7 +529,7 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
             "createdAt": now_iso(),
         }
     except Exception as exc:  # noqa: BLE001
-        error = str(exc)
+        error = str(exc)[:300]
         raise
     finally:
         with sqlite3.connect(DB_PATH) as conn:
@@ -536,7 +586,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, ai_runs()); return
             self.serve_static()
         except Exception as exc:  # noqa: BLE001
-            json_response(self, 500, {"ok": False, "error": str(exc)})
+            json_response(self, 500, {"ok": False, "error": str(exc)[:300]})
 
     def do_PUT(self) -> None:  # noqa: N802
         try:
@@ -544,7 +594,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, save_workspace(read_json(self))); return
             json_response(self, 404, {"ok": False, "error": "Not found"})
         except Exception as exc:  # noqa: BLE001
-            json_response(self, 400, {"ok": False, "error": str(exc)})
+            json_response(self, 400, {"ok": False, "error": str(exc)[:300]})
 
     def do_POST(self) -> None:  # noqa: N802
         try:
@@ -558,7 +608,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, restore_revision(payload)); return
             json_response(self, 404, {"ok": False, "error": "Not found"})
         except Exception as exc:  # noqa: BLE001
-            json_response(self, 400, {"ok": False, "error": str(exc)})
+            json_response(self, 400, {"ok": False, "error": str(exc)[:300]})
 
     def do_DELETE(self) -> None:  # noqa: N802
         try:
@@ -568,7 +618,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, delete_session_secret(provider)); return
             json_response(self, 404, {"ok": False, "error": "Not found"})
         except Exception as exc:  # noqa: BLE001
-            json_response(self, 400, {"ok": False, "error": str(exc)})
+            json_response(self, 400, {"ok": False, "error": str(exc)[:300]})
 
     def serve_static(self) -> None:
         request_path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path).lstrip("/") or "index.html"
@@ -588,6 +638,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
