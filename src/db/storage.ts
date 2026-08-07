@@ -70,6 +70,12 @@ const newer = (a: Workspace | null, b: Workspace | null): Workspace | null => {
   return at >= bt ? a : b;
 };
 
+const isFresherThan = (candidate: Workspace | null, baseline: Workspace | null): boolean => {
+  const [candidateRevision, candidateUpdatedAt] = freshness(candidate);
+  const [baselineRevision, baselineUpdatedAt] = freshness(baseline);
+  return candidateRevision > baselineRevision || (candidateRevision === baselineRevision && candidateUpdatedAt > baselineUpdatedAt);
+};
+
 const putSqlite = async (workspace: Workspace): Promise<{ workspace: Workspace; storage?: ServerStorageMeta }> => {
   const payload = await fetchJson<{ ok: true; workspace?: unknown; storage?: ServerStorageMeta }>('/api/workspace', {
     method: 'PUT',
@@ -108,14 +114,15 @@ export const loadWorkspaceRecord = async (): Promise<Workspace | null> => {
     return null;
   }
 
-  // Reconcile in both directions. The newest revision wins, with updatedAt as tie-breaker.
-  if (winner === indexed && indexed && freshness(indexed)[0] > freshness(sqlite)[0]) {
+  // Reconcile in both directions. Revision is authoritative; updatedAt breaks equal-revision ties.
+  // This also protects edits made from an older client that failed to increment revision but have a newer timestamp.
+  if (winner === indexed && indexed && isFresherThan(indexed, sqlite)) {
     try {
       const saved = await putSqlite(indexed);
       await saveIndexedDb(saved.workspace);
       status = {
         mode: 'hybrid', ok: true,
-        detail: `Recovered newer IndexedDB revision ${indexed.revision} into SQLite`,
+        detail: `Recovered newer IndexedDB revision ${indexed.revision ?? 0} into SQLite`,
         ...saved.storage,
       };
       return saved.workspace;
@@ -129,7 +136,7 @@ export const loadWorkspaceRecord = async (): Promise<Workspace | null> => {
   if (sqlite) await saveIndexedDb(sqlite);
   status = {
     mode: 'hybrid', ok: true,
-    detail: `SQLite source of truth mirrored to IndexedDB · revision ${sqlite?.revision ?? winner.revision}`,
+    detail: `SQLite source of truth mirrored to IndexedDB · revision ${sqlite?.revision ?? winner.revision ?? 0}`,
     ...serverPayload.storage,
   };
   return sqlite ?? winner;
@@ -142,7 +149,7 @@ export const saveWorkspaceRecord = async (workspace: Workspace): Promise<Workspa
     const saved = await putSqlite(workspace);
     await saveIndexedDb(saved.workspace);
     status = {
-      mode: 'hybrid', ok: true, detail: `Saved transactionally · revision ${saved.workspace.revision}`,
+      mode: 'hybrid', ok: true, detail: `Saved transactionally · revision ${saved.workspace.revision ?? 0}`,
       ...saved.storage,
     };
     return saved.workspace;
@@ -150,7 +157,7 @@ export const saveWorkspaceRecord = async (workspace: Workspace): Promise<Workspa
     console.warn('SQLite save failed; IndexedDB mirror retained for later reconciliation.', error);
     status = {
       mode: 'indexeddb', ok: true,
-      detail: `SQLite unavailable; revision ${workspace.revision} is safe in IndexedDB and will reconcile on reconnect.`,
+      detail: `SQLite unavailable; revision ${workspace.revision ?? 0} is safe in IndexedDB and will reconcile on reconnect.`,
       revision: workspace.revision,
     };
     return workspace;
@@ -174,6 +181,6 @@ export const restoreRecoveryRevision = async (revision: number): Promise<Workspa
   const workspace = validWorkspace(payload.workspace);
   if (!workspace) throw new Error('Recovered workspace failed validation');
   await saveIndexedDb(workspace);
-  status = { mode: 'hybrid', ok: true, detail: `Restored revision ${revision} as revision ${workspace.revision}`, ...payload.storage };
+  status = { mode: 'hybrid', ok: true, detail: `Restored revision ${revision} as revision ${workspace.revision ?? 0}`, ...payload.storage };
   return workspace;
 };
