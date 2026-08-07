@@ -1,4 +1,4 @@
-import type { CalendarTask, VideoProject, Workspace } from './types.js';
+import type { CalendarTask, GrowthLoopStatus, VideoProject, Workspace } from './types.js';
 import { normalizeWorkspaceFocus } from './focus.js';
 import { syncNextWorkflowMission } from './workflow.js';
 
@@ -9,11 +9,22 @@ const defaultPublishAt = (project: Partial<VideoProject>): string => {
   return `${date}T19:00:00`;
 };
 
+const productionFinished = (project: Partial<VideoProject>): boolean =>
+  ['published', 'analytics-review', 'repurpose', 'archived'].includes(String(project.status)) && Array.isArray(project.publicationLinks) && project.publicationLinks.length > 0;
+
+const growthStatus = (project: Partial<VideoProject>): GrowthLoopStatus => {
+  if (project.growthLoopStatus) return project.growthLoopStatus;
+  if (project.status === 'archived') return 'complete';
+  if (project.status === 'repurpose') return 'repurpose';
+  if (project.status === 'analytics-review') return 'analytics';
+  return 'pending';
+};
+
 const migrateProject = (project: Partial<VideoProject>): VideoProject => ({
   ...(project as VideoProject),
   publishAt: defaultPublishAt(project),
-  productionCompletedAt: project.productionCompletedAt,
-  growthLoopStatus: project.growthLoopStatus ?? (project.status === 'archived' ? 'complete' : project.status === 'repurpose' ? 'repurpose' : project.status === 'analytics-review' ? 'analytics' : 'pending'),
+  productionCompletedAt: project.productionCompletedAt ?? (productionFinished(project) ? project.updatedAt ?? new Date().toISOString() : undefined),
+  growthLoopStatus: growthStatus(project),
   researchSummary: project.researchSummary ?? '',
   factCheckSummary: project.factCheckSummary ?? '',
   assetPrompts: Array.isArray(project.assetPrompts) ? project.assetPrompts : [],
@@ -67,12 +78,7 @@ export const migrateWorkspace = (input: Workspace | Record<string, unknown>): Wo
   };
   source.calendarTasks = source.calendarTasks.map((task) => {
     const project = source.projects.find((candidate) => candidate.id === task.projectId);
-    return {
-      ...task,
-      templateKind: task.templateKind === 'manual' || task.templateKind === 'growth'
-        ? task.templateKind
-        : project?.format === 'long' ? 'long' : 'shorts',
-    };
+    return { ...task, templateKind: task.templateKind === 'manual' || task.templateKind === 'growth' ? task.templateKind : project?.format === 'long' ? 'long' : 'shorts' };
   });
   normalizeWorkspaceFocus(source);
   source.projects.filter((project) => project.status !== 'archived').forEach((project) => syncNextWorkflowMission(source, project.id));
