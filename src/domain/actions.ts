@@ -1,16 +1,14 @@
 // Action, Form, and Change handler constants
-// Replaces magic strings with typed constants for compile-time safety
+// Centralizes UI contracts to avoid magic strings.
 
 export const Actions = {
-  // Navigation & Focus
   OPEN_COMMAND: 'open-command',
   OPEN_FOCUS_PICKER: 'open-focus-picker',
   PORTFOLIO_MODE: 'portfolio-mode',
   FOCUS_PRIMARY_CHANNEL: 'focus-primary-channel',
   FOCUS_CHANNEL: 'focus-channel',
   SET_ACTIVE_PROJECT: 'set-active-project',
-  
-  // Workflow
+
   START_FOCUS_MISSION: 'start-focus-mission',
   START_MISSION: 'start-mission',
   COMPLETE_MISSION: 'complete-mission',
@@ -18,44 +16,36 @@ export const Actions = {
   GENERATE_WORKFLOW_PLAN: 'generate-workflow-plan',
   COMPLETE_ONBOARDING: 'complete-onboarding',
   COMPLETE_DAILY_MISSION: 'complete-daily-mission',
-  
-  // Prompt Studio
+
   COPY_PROMPT: 'copy-prompt',
   COPY_CAPCUT_PROMPT: 'copy-capcut-prompt',
   GENERATE_WITH_AI: 'generate-with-ai',
   SAVE_PROMPT: 'save-prompt',
   PARSE_RESPONSE: 'parse-response',
-  
-  // Project Management
+
   MOVE_PROJECT_NEXT: 'move-project-next',
   DELETE_PROJECT: 'delete-project',
   TOGGLE_SAVE_IDEA: 'toggle-save-idea',
   RECALCULATE_RISK: 'recalculate-risk',
-  
-  // Calendar & Tasks
+
   TOGGLE_TASK: 'toggle-task',
-  
-  // Simulator
+
   RESET_SIMULATOR: 'reset-simulator',
-  
-  // Settings & AI
+
   SAVE_SETTINGS: 'save-settings',
   REFRESH_AI_STATUS: 'refresh-ai-status',
   TEST_AI_PROVIDER: 'test-ai-provider',
   CLEAR_AI_KEY: 'clear-ai-key',
-  
-  // Import/Export
+
   EXPORT_ICS: 'export-ics',
   EXPORT_WORKSPACE: 'export-workspace',
   EXPORT_PROJECTS_CSV: 'export-projects-csv',
   EXPORT_ANALYTICS_CSV: 'export-analytics-csv',
   REMOVE_DEMO_DATA: 'remove-demo-data',
   RESET_WORKSPACE: 'reset-workspace',
-  
-  // UI
+
   DISMISS_TOAST: 'dismiss-toast',
-  
-  // Focus Picker Dialog
+
   PICKER_PORTFOLIO: 'picker-portfolio',
   PICKER_CHANNEL: 'picker-channel',
   PICKER_PROJECT: 'picker-project',
@@ -70,6 +60,7 @@ export const Forms = {
   PROMPT_CONTEXT: 'prompt-context',
   CREDIT_ENTRY: 'credit-entry',
   CALENDAR_TASK: 'calendar-task',
+  RESCHEDULE_PROJECT: 'reschedule-project',
   SIMULATION: 'simulation',
   ANALYTICS_ENTRY: 'analytics-entry',
   MONETIZATION_PATH: 'monetization-path',
