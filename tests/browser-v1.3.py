@@ -108,7 +108,7 @@ def main() -> None:
         record("credentials explain non-SQLite persistence", "Session-only API key" in body and "Environment Variable" in body)
         record("AI budgets are exposed", "Daily budget USD" in body and "Max output tokens" in body)
 
-        # Dual-storage reconciliation: create a newer browser copy and verify it wins on full reload.
+        # Dual-storage reconciliation: higher IndexedDB revision wins and is written back to SQLite.
         server_state = api("/api/workspace")
         newer = server_state["workspace"]
         server_revision = int(server_state["storage"]["revision"])
@@ -122,10 +122,22 @@ def main() -> None:
         record("newer IndexedDB revision reconciles into SQLite", reconciled["workspace"]["name"] == "IDB newer recovery marker")
         record("reconciled revision is monotonic", int(reconciled["storage"]["revision"]) >= server_revision + 5)
 
+        # Equal-revision tie: updatedAt is the tie-breaker and must also reconcile, not merely render from cache.
+        tie = api("/api/workspace")
+        tie_copy = tie["workspace"]
+        tie_copy["revision"] = int(tie["storage"]["revision"])
+        tie_copy["name"] = "IDB equal-revision newer-time marker"
+        tie_copy["updatedAt"] = "2099-01-15T00:00:00.000Z"
+        set_idb_workspace(page, tie_copy)
+        page.reload(wait_until="domcontentloaded")
+        wait_app(page)
+        tie_reconciled = api("/api/workspace")
+        record("equal revision uses newer updatedAt and reconciles durably", tie_reconciled["workspace"]["name"] == "IDB equal-revision newer-time marker")
+
         # SQLite outage: abort workspace API so bootstrap must use IndexedDB. Then reconnect and verify recovery.
         page.route("**/api/workspace", lambda route: route.abort())
-        offline = reconciled["workspace"]
-        offline["revision"] = int(reconciled["storage"]["revision"]) + 5
+        offline = tie_reconciled["workspace"]
+        offline["revision"] = int(tie_reconciled["storage"]["revision"]) + 5
         offline["name"] = "offline browser recovery marker"
         offline["updatedAt"] = "2099-02-01T00:00:00.000Z"
         set_idb_workspace(page, offline)
