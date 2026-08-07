@@ -23,7 +23,12 @@ const queueSave = (): void => {
   const snapshot = deepClone(workspace);
   saveQueue = saveQueue
     .catch(() => undefined)
-    .then(() => saveWorkspaceRecord(snapshot));
+    .then(async () => {
+      const saved = await saveWorkspaceRecord(snapshot);
+      // The SQLite server may advance the durable revision during recovery/reconciliation.
+      // Never move the live in-memory revision backwards.
+      if (saved.revision > workspace.revision) workspace.revision = saved.revision;
+    });
 };
 
 export const initializeStore = async (): Promise<Workspace> => {
@@ -44,6 +49,7 @@ export const subscribe = (listener: StoreListener): (() => void) => {
 
 export const replaceWorkspace = (next: Workspace): void => {
   workspace = migrateWorkspace(deepClone(next));
+  workspace.revision = Math.max(0, workspace.revision ?? 0) + 1;
   workspace.updatedAt = new Date().toISOString();
   workspace.level = computeLevel(workspace.xp);
   queueSave();
@@ -55,6 +61,7 @@ export const updateWorkspace = (mutator: (draft: Workspace) => void): void => {
   mutator(draft);
   normalizeWorkspaceFocus(draft);
   draft.projects.filter((project) => project.status !== 'archived').forEach((project) => syncNextWorkflowMission(draft, project.id));
+  draft.revision = Math.max(0, workspace.revision ?? 0) + 1;
   draft.updatedAt = new Date().toISOString();
   draft.level = computeLevel(draft.xp);
   workspace = draft;
