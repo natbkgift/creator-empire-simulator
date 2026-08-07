@@ -22,7 +22,7 @@ export const renderBlueprint = (workspace: Workspace, params: URLSearchParams): 
           <form class="stack" data-form="create-project">
             <input type="hidden" name="channelId" value="${escapeHtml(channel.id)}"/>
             <div class="field"><label>หัวข้อวิดีโอ</label><input class="input" name="title" value="${escapeHtml(blueprint.plan30Days[0]?.title ?? channel.niche)}" required/></div>
-            <div class="form-grid"><div class="field"><label>ชนิดวิดีโอ</label><select class="select" name="format"><option value="shorts">Shorts</option><option value="long">Long-form</option></select></div><div class="field"><label>วันและเวลาที่จะ Publish</label><input class="input" type="datetime-local" name="publishAt" value="${publishDate}T${escapeHtml(publishTime)}" required/></div></div>
+            <div class="form-grid"><div class="field"><label>ชนิดวิดีโอ</label><select class="select" name="format"><option value="shorts">Shorts</option><option value="long">Long-form</option></select></div><div class="field"><label>วันและเวลาที่จะ Publish</label><input class="input" type="datetime-local" name="deadline" value="${publishDate}T${escapeHtml(publishTime)}" required/></div></div>
             <p class="muted small-copy">ระบบจะแตก Research → Script → Storyboard → Edit → QA → Upload และตรวจ Capacity ให้อัตโนมัติ</p>
             <button class="btn primary" type="submit">วางแผนวิดีโอนี้</button>
           </form>
