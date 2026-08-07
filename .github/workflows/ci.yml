@@ -1,0 +1,82 @@
+name: Creator Empire v1.3 CI
+
+on:
+  push:
+    branches:
+      - main
+      - codex/v1.3-data-safe-production-workflow
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-domain-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm test
+      - run: python tests/server-v1.3.py
+      - name: Ensure runtime artifacts are not tracked
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^dist/|^data/|\.sqlite$|\.sqlite-wal$|\.sqlite-shm$)' ; then
+            echo 'Tracked runtime/build artifacts found.' >&2
+            exit 1
+          fi
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - run: python -m pip install playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Start isolated local server
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/creator-empire"
+          CREATOR_EMPIRE_DB="$RUNNER_TEMP/creator-empire/creator.sqlite" python creator_server.py --root dist --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/creator-empire/server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/creator-empire/server.pid"
+          for i in {1..40}; do
+            curl -fsS http://127.0.0.1:4173/api/storage >/dev/null && exit 0
+            sleep 0.25
+          done
+          cat "$RUNNER_TEMP/creator-empire/server.log"
+          exit 1
+      - run: python tests/browser-v1.3.py
+
+  windows-startup:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm run build
+      - shell: pwsh
+        run: ./tests/windows-startup-v1.3.ps1
