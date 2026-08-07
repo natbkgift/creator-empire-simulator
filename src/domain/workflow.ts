@@ -143,13 +143,18 @@ const usedMinutesOn = (workspace: Workspace, date: string, projectId: string): n
   .reduce((sum, task) => sum + task.durationMinutes, 0);
 
 const nextCapacitySlot = (workspace: Workspace, project: VideoProject, date: string, duration: number): { date: string; time: string; conflict: boolean } => {
-  const dailyCapacity = Math.max(60, Math.floor(((workspace.settings.weeklyHoursAvailable || 12) * 60) / 5));
   const startMinute = timeToMinutes(workspace.settings.workdayStart || '09:00');
+  const endMinute = timeToMinutes(workspace.settings.workdayEnd || '18:00');
+  const workdayWindow = Math.max(60, endMinute > startMinute ? endMinute - startMinute : 60);
+  const weeklyDailyShare = Math.max(60, Math.floor(((workspace.settings.weeklyHoursAvailable || 12) * 60) / 5));
+  const dailyCapacity = Math.min(workdayWindow, weeklyDailyShare);
   const publishDate = publishDateFor(project);
   let cursor = date;
   for (let guard = 0; guard < 45; guard += 1) {
     const used = usedMinutesOn(workspace, cursor, project.id);
-    if (used + duration <= dailyCapacity) return { date: cursor, time: minutesToTime(startMinute + used), conflict: cursor > publishDate };
+    if (used + duration <= dailyCapacity && startMinute + used + duration <= startMinute + workdayWindow) {
+      return { date: cursor, time: minutesToTime(startMinute + used), conflict: cursor > publishDate };
+    }
     cursor = addDays(cursor, 1);
   }
   return { date: cursor, time: workspace.settings.workdayStart || '09:00', conflict: true };
