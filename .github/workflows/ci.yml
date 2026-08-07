@@ -10,72 +10,95 @@ on:
 permissions:
   contents: read
 
+env:
+  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   build-domain-server:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Checkout exact head without marketplace actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin https://github.com/${{ github.repository }}.git
+          git fetch --no-tags --depth=1 origin "$PR_HEAD_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$PR_HEAD_SHA"
+      - name: Runtime versions
+        shell: bash
+        run: |
+          node --version
+          npm --version
+          python3 --version
       - run: npm ci
       - run: npm test
-      - run: python tests/server-v1.3.py
+      - run: python3 tests/server-v1.3.py
       - name: Ensure runtime artifacts are not tracked
         shell: bash
         run: |
-          if git ls-files | grep -E '(^dist/|^data/|\.sqlite$|\.sqlite-wal$|\.sqlite-shm$)' ; then
+          set -euo pipefail
+          tracked="$(git ls-files | grep -E '(^dist/|^data/|\.sqlite$|\.sqlite-wal$|\.sqlite-shm$)' || true)"
+          if [ -n "$tracked" ]; then
+            printf '%s\n' "$tracked"
             echo 'Tracked runtime/build artifacts found.' >&2
             exit 1
           fi
 
   browser-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Checkout exact head without marketplace actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin https://github.com/${{ github.repository }}.git
+          git fetch --no-tags --depth=1 origin "$PR_HEAD_SHA"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$PR_HEAD_SHA"
       - run: npm ci
       - run: npm run build
-      - run: python -m pip install playwright
-      - run: python -m playwright install --with-deps chromium
+      - run: python3 -m pip install --user playwright
+      - run: python3 -m playwright install --with-deps chromium
       - name: Start isolated local server
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/creator-empire"
-          CREATOR_EMPIRE_DB="$RUNNER_TEMP/creator-empire/creator.sqlite" python creator_server.py --root dist --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/creator-empire/server.log" 2>&1 &
+          CREATOR_EMPIRE_DB="$RUNNER_TEMP/creator-empire/creator.sqlite" python3 creator_server.py --root dist --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/creator-empire/server.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/creator-empire/server.pid"
-          for i in {1..40}; do
-            curl -fsS http://127.0.0.1:4173/api/storage >/dev/null && exit 0
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:4173/api/storage >/dev/null; then
+              exit 0
+            fi
             sleep 0.25
           done
           cat "$RUNNER_TEMP/creator-empire/server.log"
           exit 1
-      - run: python tests/browser-v1.3.py
+      - run: python3 tests/browser-v1.3.py
 
   windows-startup:
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Checkout exact head without marketplace actions
+        shell: pwsh
+        run: |
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --no-tags --depth=1 origin $env:PR_HEAD_SHA
+          git checkout --detach FETCH_HEAD
+          if ((git rev-parse HEAD).Trim() -ne $env:PR_HEAD_SHA) { throw 'Exact-head checkout failed' }
+      - name: Runtime versions
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+          py -3 --version
       - run: npm ci
       - run: npm run build
       - shell: pwsh
