@@ -1,20 +1,21 @@
 {
   "name": "creator-empire-simulator",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
-  "description": "SQLite-backed bright creator workflow with manual and AI-assisted production modes",
+  "description": "Data-safe creator workflow with SQLite revision history, capacity planning, Manual and AI Assisted modes",
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",
     "test": "npm run build && node tests/domain-tests.mjs && node tests/ui-tests.mjs",
     "test:domain": "node tests/domain-tests.mjs",
     "test:ui": "node tests/ui-tests.mjs",
+    "test:server": "python tests/server-v1.3.py",
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "npm run build && http-server dist -p 4173 -c-1",
     "preview": "http-server dist -p 4173 -c-1",
     "start": "python3 creator_server.py --root dist --port 4173 --host 127.0.0.1",
-    "qa": "npm test"
+    "qa": "npm test && npm run test:server"
   },
   "engines": {
     "node": ">=20"
