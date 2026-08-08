@@ -13,7 +13,9 @@
 
 Local server bind เฉพาะ `127.0.0.1` โดยค่าเริ่มต้น
 
-## 5 พื้นที่หลัก
+## UX/UI v1.3
+
+ดีไซน์ใช้ **Professional Light UI** เป็นค่าเริ่มต้น: พื้นหลังสว่าง, hierarchy ชัด, ขนาดตัวอักษรอ่านง่ายขึ้น, ลด visual noise และลด navigation ให้เหลือ 5 พื้นที่หลักเท่านั้น
 
 - **Today** — Next Mission และงานวันนี้
 - **Channels** — Channel Strategy + สร้างวิดีโอจาก Topic / Format / Publish datetime
@@ -123,22 +125,38 @@ Policy Shield แยก Mandatory กับ Conditional checks โดย Mandato
 - Music / footage licensed
 - Template/repetitious-content risk reviewed
 
-## QA
+## Validation — ไม่ใช้ GitHub Actions
 
-```bash
-npm test
-python tests/server-v1.3.py
+Repository นี้ **ไม่ใช้ GitHub Actions เป็น dependency ของ build, test หรือ release gate**
+
+Windows core validation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-local.ps1
 ```
 
-เพิ่มเติมใน CI:
+รวม Browser E2E:
 
-- Browser v1.3 E2E
-- SQLite ↔ IndexedDB conflict/recovery
-- SQLite outage/reconnect
-- secret persistence test
-- mocked AI token/cost ledger test
-- Windows `START-HERE-WINDOWS.bat` startup test
-- guard ว่า `dist/`, `data/`, SQLite/WAL/SHM ไม่ถูก track
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-local.ps1 -Browser
+```
+
+macOS / Linux:
+
+```bash
+bash scripts/validate-local.sh
+bash scripts/validate-local.sh --browser
+```
+
+Local validation ครอบคลุม:
+
+- TypeScript build + domain/UI tests
+- SQLite revision/history/checksum/recovery
+- secret non-persistence
+- mocked AI token/cost guardrails
+- Windows launcher startup test
+- optional Browser E2E + mobile overflow
+- repository hygiene guard ว่า `dist/`, `data/`, SQLite/WAL/SHM และ `.env` ไม่ถูก track
 
 ## Runtime files
 
