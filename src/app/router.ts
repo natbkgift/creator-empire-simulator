@@ -1,3 +1,5 @@
+import { requestRender } from './runtime.js';
+
 export type RouteId =
   | 'onboarding' | 'hq' | 'mission' | 'map' | 'ideas' | 'blueprint' | 'production' | 'pipeline'
   | 'prompts' | 'capcut' | 'calendar' | 'simulator' | 'analytics' | 'monetization'
@@ -27,5 +29,10 @@ export const routeHref = (name: string, params?: Record<string, string | number 
 };
 
 export const navigate = (name: string, params?: Record<string, string | number | undefined> | string): void => {
-  location.hash = routeHref(name, params).slice(1);
+  const target = routeHref(name, params).slice(1);
+  if (location.hash === target) {
+    requestRender();
+  } else {
+    location.hash = target;
+  }
 };

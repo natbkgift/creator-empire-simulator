@@ -20,12 +20,12 @@ const renderPortfolio = (workspace: Workspace): string => `${pageHeader('Channel
       const published = projects.filter(isProductionComplete).length;
       const analytics = workspace.analytics.filter((entry) => entry.channelId === channel.id);
       const views = analytics.reduce((sum, entry) => sum + entry.views, 0);
-      return `<button class="channel-portfolio-card" data-action="focus-channel" data-channel-id="${escapeHtml(channel.id)}">
+      return `<a class="channel-portfolio-card" href="${routeHref('blueprint', { channel: channel.id })}" data-action="focus-channel" data-channel-id="${escapeHtml(channel.id)}">
         <div class="channel-card-top"><div><span class="kicker">${escapeHtml(channel.role)} · ${channel.language === 'th' ? 'ไทย' : 'English'}</span><h3>${escapeHtml(channel.name)}</h3><p>${escapeHtml(channel.niche)}</p></div><span class="health-badge">${channelHealth(workspace, channel)}% health</span></div>
         <div class="channel-active-video"><span>Active video</span><strong>${escapeHtml(active?.title ?? 'No active video')}</strong><small>${active ? `${escapeHtml(statusLabels[active.status])} · Publish ${escapeHtml((active.publishAt ?? active.deadline).replace('T', ' '))}` : 'Ready for a new plan'}</small></div>
         <div class="channel-card-stats"><div><span>Published</span><b>${published}</b></div><div><span>Tracked views</span><b>${views.toLocaleString()}</b></div><div><span>Plan</span><b>${channel.blueprint.plan30Days.length} ideas</b></div></div>
         <div class="channel-card-open">Open Channel Workspace <span>→</span></div>
-      </button>`;
+      </a>`;
     }).join('') || '<div class="empty-state"><div><strong>No channels yet</strong><span>Create your first Channel Blueprint.</span></div></div>'}
   </section>`;
 

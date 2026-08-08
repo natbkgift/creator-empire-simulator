@@ -15,7 +15,8 @@ export const renderCalendar = (workspace: Workspace, params: URLSearchParams): s
   const today = todayIso();
   const channel = activeChannel(workspace);
   const requested = workspace.projects.find((item) => item.id === params.get('project'));
-  const project = requested ?? activeProject(workspace);
+  const active = activeProject(workspace);
+  const project = requested ?? (active && !isProductionComplete(active) ? active : (workspace.projects.find((item) => !isProductionComplete(item) && item.status !== 'archived') ?? active));
   const projects = projectsInFocus(workspace);
   const projectIds = new Set(projects.map((item) => item.id));
   const tasks = workspace.calendarTasks.filter((task) => !task.projectId || projectIds.has(task.projectId)).toSorted((a,b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
