@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Browser E2E for v1.3 UX plus SQLite↔IndexedDB recovery."""
+"""Browser E2E for v1.3 data/recovery contracts under the v1.4 shell."""
 from __future__ import annotations
 
 import json
@@ -93,8 +93,8 @@ def main() -> None:
         wait_app(page)
 
         record("five persistent navigation destinations", page.locator(".side-rail .nav-dot").count() == 5)
-        labels = page.locator(".side-rail .nav-dot span").all_inner_texts()
-        record("navigation is task-oriented", labels == ["Today", "Channels", "Calendar", "Production", "Insights"], str(labels))
+        labels = page.locator(".side-rail .nav-dot .nav-label").all_inner_texts()
+        record("navigation is task-oriented", labels == ["Today", "Channels", "Production", "Calendar", "Insights"], str(labels))
         record("Today exposes next mission", page.locator("text=Start").count() > 0 or page.locator("text=Next").count() > 0)
 
         page.goto(f"{BASE_URL}/#/calendar", wait_until="domcontentloaded")
@@ -160,7 +160,7 @@ def main() -> None:
         overflow = page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth")
         record("mobile has no horizontal document overflow", not overflow)
         record("mobile nav keeps five destinations", page.locator(".mobile-bottom .mobile-nav").count() == 5)
-        real_errors = [e for e in console_errors if "net::ERR_FAILED" not in e and "ERR_CONNECTION" not in e]
+        real_errors = [e for e in console_errors if "net::ERR_FAILED" not in e and "ERR_CONNECTION" not in e and "fonts.googleapis.com" not in e]
         record("no browser console errors", not real_errors, " | ".join(real_errors[:3]))
 
         context.close()
