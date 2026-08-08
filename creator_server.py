@@ -831,7 +831,7 @@ def ai_capabilities() -> dict[str, Any]:
 
 
 class CreatorHandler(BaseHTTPRequestHandler):
-    server_version = "CreatorEmpireSQLite/1.4.2"
+    server_version = "CreatorEmpireSQLite/1.4.3"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
@@ -847,7 +847,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, {
                     "ok": True,
                     "service": "creator-empire",
-                    "version": "1.4.2",
+                    "version": "1.4.3",
                     "release": os.environ.get("CREATOR_EMPIRE_RELEASE_SHA", "dev"),
                 }); return
             if path == "/api/workspace":
@@ -865,6 +865,20 @@ class CreatorHandler(BaseHTTPRequestHandler):
             self.serve_static()
         except Exception as exc:  # noqa: BLE001
             json_response(self, 500, {"ok": False, "error": str(exc)[:300]})
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        try:
+            path = urllib.parse.urlparse(self.path).path
+            if path.startswith("/api/"):
+                self.send_response(405)
+                self.send_header("Allow", "GET")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
+            self.serve_static(head_only=True)
+        except Exception:
+            self.send_response(500)
+            self.end_headers()
 
     def do_PUT(self) -> None:  # noqa: N802
         try:
@@ -901,7 +915,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001
             json_response(self, 400, {"ok": False, "error": str(exc)[:300]})
 
-    def serve_static(self) -> None:
+    def serve_static(self, head_only: bool = False) -> None:
         request_path = urllib.parse.unquote(urllib.parse.urlparse(self.path).path).lstrip("/") or "index.html"
         root_resolved = self.web_root.resolve()
         candidate = (root_resolved / request_path).resolve()
@@ -923,7 +937,8 @@ class CreatorHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "same-origin")
         self.send_header("X-Frame-Options", "DENY")
         self.end_headers()
-        self.wfile.write(body)
+        if not head_only:
+            self.wfile.write(body)
 
 
 def main() -> None:

@@ -1,4 +1,4 @@
-# Creator Empire Simulator v1.4.2
+# Creator Empire Simulator v1.4.3
 
 ระบบวางแผนและผลิตวิดีโอหลายช่องแบบ **Channel Strategy → Today Mission → Calendar Plan → Production → Publish → Growth** โดยใช้ SQLite แบบ revisioned เป็น durable store, IndexedDB เป็น offline mirror และรองรับทั้ง Manual กับ AI Assisted (OpenAI / Gemini)
 

@@ -257,7 +257,7 @@ void initializeStore().then((workspace) => {
   if (!location.hash) location.hash = workspace.settings.onboardingComplete ? '#/hq' : '#/onboarding';
   else render();
   if ('serviceWorker' in navigator) {
-    const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.4.2', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };
+    const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.4.3', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };
     if (document.readyState === 'complete') registerServiceWorker(); else window.addEventListener('load', registerServiceWorker, { once: true });
   }
 }).catch((error) => {

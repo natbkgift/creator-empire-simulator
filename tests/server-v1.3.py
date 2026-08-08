@@ -136,6 +136,8 @@ def main() -> None:
         assert_true(override_route == terra_route, "important script override must promote to Terra")
         assert_true(len(server.OPENAI_ADVANCED_PROMPT_TYPES) == 3, "Terra default share must be 3 of 16 workflows")
         assert_true(server.openai_response_schema("shorts-script")["additionalProperties"] is False, "OpenAI schema must reject extra root fields")
+        handler_source = inspect.getsource(server.CreatorHandler)
+        assert_true("def do_HEAD" in handler_source and "serve_static(head_only=True)" in handler_source, "Static HEAD support missing")
         print("PASS OpenAI structured outputs, 81.25/18.75 router, store=false, timeout/retry and redaction guardrails are present")
 
         gemini_source = inspect.getsource(server.call_gemini)
