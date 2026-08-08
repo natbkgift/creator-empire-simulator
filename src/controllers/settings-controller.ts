@@ -28,6 +28,7 @@ export const saveSettings = (form: HTMLFormElement): void => {
     draft.settings.openAiOutputUsdPer1M = Math.max(0, numberFrom(data, 'openAiOutputUsdPer1M', 1.2));
     draft.settings.openAiAdvancedInputUsdPer1M = Math.max(0, numberFrom(data, 'openAiAdvancedInputUsdPer1M', 2));
     draft.settings.openAiAdvancedOutputUsdPer1M = Math.max(0, numberFrom(data, 'openAiAdvancedOutputUsdPer1M', 12));
+    draft.settings.openAiSearchUsdPerQuery = Math.max(0, numberFrom(data, 'openAiSearchUsdPerQuery', 0.01));
     draft.settings.geminiInputUsdPer1M = Math.max(0, numberFrom(data, 'geminiInputUsdPer1M', 0));
     draft.settings.geminiOutputUsdPer1M = Math.max(0, numberFrom(data, 'geminiOutputUsdPer1M', 0));
     draft.settings.geminiSearchUsdPerQuery = Math.max(0, numberFrom(data, 'geminiSearchUsdPerQuery', 0.014));

@@ -8,6 +8,7 @@ const provider = process.env.CREATOR_EMPIRE_AI_PROVIDER === 'gemini' ? 'gemini' 
 const model = process.env.CREATOR_EMPIRE_AI_MODEL || (provider === 'openai' ? 'gpt-5.6-luna' : 'gemini-3.5-flash');
 const advancedModel = process.env.CREATOR_EMPIRE_AI_ADVANCED_MODEL || 'gpt-5.6-terra';
 const advancedPromptTypes = new Set(['niche-research', 'fact-check', 'analytics-postmortem']);
+const researchPromptTypes = new Set(['niche-research', 'topic-research', 'fact-check', 'competitor-pattern']);
 const delayMs = Math.max(0, Number(process.env.CREATOR_EMPIRE_AI_TEST_DELAY_MS || 11000));
 const requestedTypes = new Set((process.env.CREATOR_EMPIRE_AI_TEST_TYPES || '').split(',').map((item) => item.trim()).filter(Boolean));
 const coverageTypes = requestedTypes.size ? promptTypes.filter((item) => requestedTypes.has(item.id)) : promptTypes;
@@ -49,6 +50,7 @@ if (process.env.CREATOR_EMPIRE_CONFIGURE_TEST_WORKSPACE === '1') {
     openAiOutputUsdPer1M: 1.2,
     openAiAdvancedInputUsdPer1M: 2,
     openAiAdvancedOutputUsdPer1M: 12,
+    openAiSearchUsdPerQuery: 0.01,
     geminiInputUsdPer1M: isFlashLite ? 0.3 : 1.5,
     geminiOutputUsdPer1M: isFlashLite ? 2.5 : 9,
     geminiSearchUsdPerQuery: 0.014,
@@ -83,10 +85,15 @@ for (const { id } of coverageTypes) {
     const validation = validatePromptResponse(payload.text || '', id);
     const expectedModel = provider === 'openai' && advancedPromptTypes.has(id) ? advancedModel : model;
     const routedCorrectly = provider !== 'openai' || payload.model === expectedModel;
+    const searchVerified = provider !== 'openai' || !researchPromptTypes.has(id) || Number(payload.searchQueries || 0) > 0;
+    const valid = validation.valid && routedCorrectly && searchVerified;
+    const error = validation.error
+      || (!routedCorrectly ? `router selected ${payload.model}; expected ${expectedModel}` : '')
+      || (!searchVerified ? 'required OpenAI web search did not run' : '');
     results.push({
       promptType: id,
-      valid: validation.valid && routedCorrectly,
-      error: validation.error || (routedCorrectly ? '' : `router selected ${payload.model}; expected ${expectedModel}`),
+      valid,
+      error,
       model: String(payload.model || ''),
       modelTier: String(payload.modelTier || ''),
       reasoningEffort: String(payload.reasoningEffort || ''),
@@ -96,7 +103,7 @@ for (const { id } of coverageTypes) {
       estimatedCostUsd: Number(payload.estimatedCostUsd || 0),
       signals: qualitySignals(validation.parsed),
     });
-    console.log(`${validation.valid && routedCorrectly ? 'PASS' : 'FAIL'} ${id} · ${payload.model || 'unknown model'}${validation.error ? ` — ${validation.error}` : routedCorrectly ? '' : ' — router mismatch'}`);
+    console.log(`${valid ? 'PASS' : 'FAIL'} ${id} · ${payload.model || 'unknown model'}${error ? ` — ${error}` : ''}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown live AI error';
     results.push({ promptType: id, valid: false, error: message, inputTokens: 0, outputTokens: 0, estimatedCostUsd: 0 });

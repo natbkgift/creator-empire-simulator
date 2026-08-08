@@ -6,10 +6,10 @@ export interface PromptResponseContract {
 }
 
 export const promptResponseContracts: Record<PromptType, PromptResponseContract> = {
-  'niche-research': { requiredAny: ['summary', 'topicClusters', 'validationSprint'], persistsTo: ['researchSummary'] },
+  'niche-research': { requiredAny: ['summary', 'topicClusters', 'validationSprint'], persistsTo: ['researchSummary', 'sources'] },
   'topic-research': { requiredAny: ['summary', 'sources', 'verifiedFacts'], persistsTo: ['researchSummary', 'sources'] },
   'fact-check': { requiredAny: ['safeSummary', 'claims', 'sources'], persistsTo: ['factCheckSummary', 'sources'] },
-  'competitor-pattern': { requiredAny: ['summary', 'patterns', 'transformedPrinciples'], persistsTo: ['researchSummary'] },
+  'competitor-pattern': { requiredAny: ['summary', 'patterns', 'transformedPrinciples'], persistsTo: ['researchSummary', 'sources'] },
   'hook-generator': { requiredAny: ['hooks', 'hook'], persistsTo: ['hook'] },
   'shorts-script': { requiredAny: ['script'], persistsTo: ['title', 'hook', 'script', 'factCheckSummary'] },
   'long-script': { requiredAny: ['script'], persistsTo: ['title', 'hook', 'script', 'factCheckSummary'] },

@@ -81,7 +81,7 @@ export const parseAndApplyPromptResponse = (): void => {
         const source: SourceRecord = existing ?? {
           id: uid('source'), projectId: target.id, title, url, publisher: firstString(item.publisher), accessedAt: new Date().toISOString(),
           claimType: ['documented', 'reported', 'disputed', 'context'].includes(firstString(item.claimType)) ? firstString(item.claimType) as SourceRecord['claimType'] : 'context',
-          notes: `${groundedSearchQueries ? '[Google Search grounded] ' : ''}${firstString(item.notes) || firstString(item.evidence)}`.trim(),
+          notes: `${groundedSearchQueries ? `[Web search grounded: ${providerGenerated === 'openai' ? 'OpenAI' : providerGenerated === 'gemini' ? 'Google' : 'provider'}] ` : ''}${firstString(item.notes) || firstString(item.evidence)}`.trim(),
         };
         if (!existing) draft.sources.push(source);
         if (!target.sourceIds.includes(source.id)) { target.sourceIds.push(source.id); attached += 1; }
@@ -99,6 +99,7 @@ export const parseAndApplyPromptResponse = (): void => {
       summary = appendSection(summary, 'Risks', readableList(parsed.risks));
       target.researchSummary = summary;
       changed.push(type === 'niche-research' ? 'niche research' : 'competitor patterns');
+      attachSources(parsed.sources);
     }
     if (type === 'topic-research') {
       target.researchSummary = firstString(parsed.summary) || firstString(parsed.researchSummary) || target.researchSummary;

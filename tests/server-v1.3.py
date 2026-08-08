@@ -39,6 +39,7 @@ def workspace(name: str, revision: int = 0) -> dict:
             "openAiOutputUsdPer1M": 2,
             "openAiAdvancedInputUsdPer1M": 10,
             "openAiAdvancedOutputUsdPer1M": 20,
+            "openAiSearchUsdPerQuery": 0.01,
             "geminiInputUsdPer1M": 1,
             "geminiOutputUsdPer1M": 2,
             "geminiSearchUsdPerQuery": 0.014,
@@ -109,7 +110,7 @@ def main() -> None:
         server.save_workspace({"workspace": workspace("ai-mock", 4)})
         server.SESSION_KEYS["openai"] = "sk-test-only"
         original = server.call_openai
-        server.call_openai = lambda prompt, model, api_key, max_output_tokens, timeout, prompt_type, reasoning_effort: ('{"ok":true}', 100, 50)
+        server.call_openai = lambda prompt, model, api_key, max_output_tokens, timeout, prompt_type, reasoning_effort: ('{"ok":true}', 100, 50, 0)
         try:
             generated = server.ai_generate({"provider": "openai", "model": "mock-openai", "prompt": "test", "maxOutputTokens": 500})
         finally:
@@ -125,6 +126,8 @@ def main() -> None:
         assert_true('"store": False' in source, "OpenAI Responses call must set store=false")
         assert_true('"max_output_tokens": max_output_tokens' in source, "OpenAI output bound missing")
         assert_true('"type": "json_schema"' in source and '"strict": True' in source, "OpenAI strict structured output missing")
+        assert_true('request_payload["tools"] = [{"type": "web_search"}]' in source, "OpenAI research grounding tool missing")
+        assert_true('request_payload["tool_choice"] = "required"' in source, "OpenAI research grounding must be mandatory")
         post_source = inspect.getsource(server.post_json)
         assert_true("attempts: int = 4" in post_source and "Retry-After" in post_source and "time.sleep" in post_source, "retry/backoff contract missing")
         assert_true("provider response bodies" in post_source.lower(), "provider error-body redaction contract missing")
@@ -136,6 +139,8 @@ def main() -> None:
         assert_true(override_route == terra_route, "important script override must promote to Terra")
         assert_true(len(server.OPENAI_ADVANCED_PROMPT_TYPES) == 3, "Terra default share must be 3 of 16 workflows")
         assert_true(server.openai_response_schema("shorts-script")["additionalProperties"] is False, "OpenAI schema must reject extra root fields")
+        grounded_openai_cost = server.estimate_cost("openai", 100, 50, workspace("grounded-openai")["settings"], 2, "mock-openai")
+        assert_true(abs(grounded_openai_cost - 0.0202) < 1e-9, "OpenAI web search cost must be included in the ledger")
         handler_source = inspect.getsource(server.CreatorHandler)
         assert_true("def do_HEAD" in handler_source and "serve_static(head_only=True)" in handler_source, "Static HEAD support missing")
         print("PASS OpenAI structured outputs, 81.25/18.75 router, store=false, timeout/retry and redaction guardrails are present")

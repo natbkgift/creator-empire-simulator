@@ -43,6 +43,7 @@ OPENAI_DEFAULT_MODEL = "gpt-5.6-luna"
 OPENAI_ADVANCED_MODEL = "gpt-5.6-terra"
 # 3 of 16 default routes use Terra (18.75%). Important scripts can be promoted per run.
 OPENAI_ADVANCED_PROMPT_TYPES = frozenset({"niche-research", "fact-check", "analytics-postmortem"})
+RESEARCH_PROMPT_TYPES = frozenset({"niche-research", "topic-research", "fact-check", "competitor-pattern"})
 
 
 @contextlib.contextmanager
@@ -436,7 +437,14 @@ def provider_rates(provider: str, settings: dict[str, Any], model: str = "") -> 
 def estimate_cost(provider: str, input_tokens: int, output_tokens: int, settings: dict[str, Any], search_queries: int = 0, model: str = "") -> float:
     input_rate, output_rate = provider_rates(provider, settings, model)
     token_cost = (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
-    search_cost = search_queries * numeric_setting(settings, "geminiSearchUsdPerQuery", 0.014, 0, 10) if provider == "gemini" else 0
+    search_rate = numeric_setting(
+        settings,
+        "openAiSearchUsdPerQuery" if provider == "openai" else "geminiSearchUsdPerQuery",
+        0.01 if provider == "openai" else 0.014,
+        0,
+        10,
+    )
+    search_cost = search_queries * search_rate
     return token_cost + search_cost
 
 
@@ -532,7 +540,7 @@ def call_openai(
     timeout: float,
     prompt_type: str = "",
     reasoning_effort: str = "low",
-) -> tuple[str, int, int]:
+) -> tuple[str, int, int, int]:
     request_payload: dict[str, Any] = {
         "model": model,
         "input": prompt,
@@ -553,6 +561,9 @@ def call_openai(
         }
     else:
         request_payload["text"] = {"format": {"type": "json_object"}}
+    if prompt_type in RESEARCH_PROMPT_TYPES:
+        request_payload["tools"] = [{"type": "web_search"}]
+        request_payload["tool_choice"] = "required"
     data = post_json(
         "https://api.openai.com/v1/responses",
         {"Authorization": f"Bearer {api_key}"},
@@ -564,11 +575,14 @@ def call_openai(
         reason = str(details.get("reason") or "unknown")[:80]
         raise RuntimeError(f"OpenAI response incomplete: {reason}")
     chunks: list[str] = []
+    search_queries = 0
     if isinstance(data.get("output_text"), str):
         chunks.append(data["output_text"])
     for item in data.get("output", []) if isinstance(data.get("output"), list) else []:
         if not isinstance(item, dict):
             continue
+        if item.get("type") == "web_search_call":
+            search_queries += 1
         for content in item.get("content", []) if isinstance(item.get("content"), list) else []:
             if isinstance(content, dict) and content.get("type") == "refusal":
                 raise RuntimeError("OpenAI declined this request")
@@ -586,6 +600,7 @@ def call_openai(
         text,
         int(usage.get("input_tokens", 0) or 0),
         int(usage.get("output_tokens", 0) or 0),
+        search_queries,
     )
 
 
@@ -604,10 +619,10 @@ def gemini_response_schema(prompt_type: str) -> dict[str, Any] | None:
     scenes = object_array({"start": number, "end": number, "narration": string, "visual": string, "onScreenText": string, "sourceNote": string}, ["start", "end", "visual"], 14)
     asset_prompts = object_array({"scene": string, "prompt": string, "durationSeconds": number, "aspectRatio": string, "negativeConstraints": strings}, ["scene", "prompt"], 12)
     fields: dict[str, tuple[str, dict[str, Any]]] = {
-        "niche-research": ("summary", {"summary": string, "topicClusters": strings, "validationSprint": object_array({"title": string, "format": string, "reason": string}, ["title", "format"], 12), "risks": strings, "nextAction": string}),
+        "niche-research": ("summary", {"summary": string, "sources": sources, "topicClusters": strings, "validationSprint": object_array({"title": string, "format": string, "reason": string}, ["title", "format"], 12), "risks": strings, "nextAction": string}),
         "topic-research": ("summary", {"summary": string, "sources": sources, "verifiedFacts": strings, "disputedClaims": strings, "nextAction": string}),
         "fact-check": ("safeSummary", {"safeSummary": string, "claims": object_array({"claim": string, "status": string, "evidence": string, "caveat": string}, ["claim", "status"], 3), "blockingIssues": strings, "sources": sources}),
-        "competitor-pattern": ("summary", {"summary": string, "patterns": object_array({"pattern": string, "evidence": string, "application": string}, ["pattern", "application"]), "doNotCopy": strings, "transformedPrinciples": strings, "nextAction": string}),
+        "competitor-pattern": ("summary", {"summary": string, "sources": sources, "patterns": object_array({"pattern": string, "evidence": string, "application": string}, ["pattern", "application"]), "doNotCopy": strings, "transformedPrinciples": strings, "nextAction": string}),
         "hook-generator": ("hooks", {"hooks": object_array({"text": string, "pattern": string, "whyItWorks": string}, ["text", "pattern"], 12), "recommendedIndex": integer}),
         "shorts-script": ("script", {"title": string, "hook": string, "script": narrative, "durationSeconds": integer, "factCaveats": strings, "nextAction": string}),
         "long-script": ("script", {"title": string, "hook": string, "script": narrative, "durationSeconds": integer, "factCaveats": strings, "nextAction": string}),
@@ -650,7 +665,7 @@ def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, t
             "contents": [{"parts": [{"text": prompt + retry_instruction}]}],
             "generationConfig": generation_config,
         }
-        if model.startswith("gemini-3") and prompt_type in {"niche-research", "topic-research", "fact-check", "competitor-pattern"}:
+        if model.startswith("gemini-3") and prompt_type in RESEARCH_PROMPT_TYPES:
             request_payload["tools"] = [{"google_search": {}}]
         data = post_json(
             f"https://generativelanguage.googleapis.com/v1beta/models/{encoded_model}:generateContent",
@@ -736,7 +751,7 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
         estimated_cost = 0.0
         try:
             if provider == "openai":
-                text, input_tokens, output_tokens = call_openai(
+                text, input_tokens, output_tokens, search_queries = call_openai(
                     prompt, model, api_key, max_tokens, timeout, prompt_type, reasoning_effort
                 )
             else:
@@ -818,6 +833,7 @@ def ai_capabilities() -> dict[str, Any]:
             "advancedSharePercent": 18.75,
             "importantScriptOverride": True,
         },
+        "searchGrounding": {"openai": sorted(RESEARCH_PROMPT_TYPES), "gemini": sorted(RESEARCH_PROMPT_TYPES)},
         "guardrails": {
             "promptCharacterLimit": 100_000,
             "maxOutputTokens": int(numeric_setting(settings, "aiMaxOutputTokens", 2500, 128, 16000)),
@@ -831,7 +847,7 @@ def ai_capabilities() -> dict[str, Any]:
 
 
 class CreatorHandler(BaseHTTPRequestHandler):
-    server_version = "CreatorEmpireSQLite/1.4.3"
+    server_version = "CreatorEmpireSQLite/1.4.4"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
@@ -847,7 +863,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, {
                     "ok": True,
                     "service": "creator-empire",
-                    "version": "1.4.3",
+                    "version": "1.4.4",
                     "release": os.environ.get("CREATOR_EMPIRE_RELEASE_SHA", "dev"),
                 }); return
             if path == "/api/workspace":

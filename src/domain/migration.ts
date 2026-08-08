@@ -74,6 +74,7 @@ export const migrateWorkspace = (input: Workspace | Record<string, unknown>): Wo
     openAiOutputUsdPer1M: source.settings?.openAiOutputUsdPer1M ?? 1.2,
     openAiAdvancedInputUsdPer1M: source.settings?.openAiAdvancedInputUsdPer1M ?? 2,
     openAiAdvancedOutputUsdPer1M: source.settings?.openAiAdvancedOutputUsdPer1M ?? 12,
+    openAiSearchUsdPerQuery: source.settings?.openAiSearchUsdPerQuery ?? 0.01,
     geminiInputUsdPer1M: source.settings?.geminiInputUsdPer1M ?? 0,
     geminiOutputUsdPer1M: source.settings?.geminiOutputUsdPer1M ?? 0,
     geminiSearchUsdPerQuery: source.settings?.geminiSearchUsdPerQuery ?? 0.014,

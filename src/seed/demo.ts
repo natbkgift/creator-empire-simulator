@@ -392,6 +392,7 @@ export const createSeedWorkspace = (): Workspace => ({
     openAiOutputUsdPer1M: 1.2,
     openAiAdvancedInputUsdPer1M: 2,
     openAiAdvancedOutputUsdPer1M: 12,
+    openAiSearchUsdPerQuery: 0.01,
     geminiModel: 'gemini-3.5-flash',
     geminiThinkingLevel: 'low',
     geminiSearchUsdPerQuery: 0.014,

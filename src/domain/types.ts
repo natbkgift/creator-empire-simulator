@@ -141,7 +141,7 @@ export interface Settings {
   reducedMotion: boolean; onboardingComplete: boolean; workflowMode: AutomationMode; aiProvider: AiProvider; openAiModel: string; openAiAdvancedModel?: string;
   geminiModel: string; geminiThinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'; connectedAiEnabled: boolean; connectedAiProxyUrl: string; sqliteStorageEnabled: boolean; activeChannelLimit: number;
   aiMaxOutputTokens?: number; aiRequestTimeoutSeconds?: number; aiDailyBudgetUsd?: number; aiMonthlyBudgetUsd?: number;
-  openAiInputUsdPer1M?: number; openAiOutputUsdPer1M?: number; openAiAdvancedInputUsdPer1M?: number; openAiAdvancedOutputUsdPer1M?: number; geminiInputUsdPer1M?: number; geminiOutputUsdPer1M?: number; geminiSearchUsdPerQuery?: number;
+  openAiInputUsdPer1M?: number; openAiOutputUsdPer1M?: number; openAiAdvancedInputUsdPer1M?: number; openAiAdvancedOutputUsdPer1M?: number; openAiSearchUsdPerQuery?: number; geminiInputUsdPer1M?: number; geminiOutputUsdPer1M?: number; geminiSearchUsdPerQuery?: number;
   workdayStart?: string; workdayEnd?: string; defaultPublishTime?: string;
 }
 
