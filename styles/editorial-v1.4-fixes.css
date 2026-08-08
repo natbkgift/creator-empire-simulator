@@ -30,6 +30,15 @@
 .task-state-text { display:block; margin-top:5px; color:var(--dim); font:500 8px/1.3 var(--font-mono); text-transform:uppercase; letter-spacing:.04em; }
 .calendar-task-card.conflict .task-state-text { color:var(--red); }
 .calendar-task-card.done .task-state-text { color:var(--green); }
+.mobile-controls-menu { display:flex; flex-direction:column; gap:22px; }
+.mobile-controls-menu section { display:flex; flex-direction:column; gap:5px; }
+.mobile-control-row { display:block; width:100%; padding:11px 12px; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--text); text-decoration:none; text-align:left; cursor:pointer; }
+.mobile-control-row:hover,.mobile-control-row.active { background:var(--surface-2); border-color:var(--line); }
+.mobile-control-row.active { border-color:rgba(107,91,215,.42); }
+.mobile-control-row strong,.mobile-control-row small { display:block; }
+.mobile-control-row strong { font-size:12px; }
+.mobile-control-row small { margin-top:3px; color:var(--dim); font-size:10px; line-height:1.45; }
+.mobile-control-utilities { padding-top:16px; border-top:1px solid var(--line); }
 
 @media (max-width: 767px) {
   .calendar-mobile-day { display:block; margin-bottom:14px; }
