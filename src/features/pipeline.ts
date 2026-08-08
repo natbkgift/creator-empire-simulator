@@ -1,63 +1,99 @@
 import type { ProjectStatus, VideoProject } from '../domain/types.js';
 import type { View } from '../app/view.js';
-import { getQuery, navigate, routeHref } from '../app/router.js';
+import { navigate, routeHref } from '../app/router.js';
 import { requestRender } from '../app/runtime.js';
-import { awardXp, getWorkspace, updateWorkspace } from '../app/store.js';
+import { getWorkspace, updateWorkspace } from '../app/store.js';
 import { activeChannel, activeProject, statusLabels } from '../app/selectors.js';
 import { applyChannelFocus, applyProjectFocus } from '../domain/focus.js';
-import { buildWorkflowTasks, recordWorkflowEvent, syncNextWorkflowMission, workflowReadiness, workflowStageRank, workflowStatuses } from '../domain/workflow.js';
-import { addDays, escapeHtml, todayIso, uid } from '../domain/utils.js';
+import { isProductionComplete } from '../domain/workflow.js';
+import { escapeHtml, todayIso } from '../domain/utils.js';
 import { button, chip, dataBadge, metric, pageHeader } from '../ui/components.js';
 import { openDialog, showToast } from '../ui/feedback.js';
+import { createProjectFromForm } from '../controllers/entity-controller.js';
 
-const statuses = workflowStatuses.map((id) => ({ id, label: statusLabels[id] }));
+interface StageGroup {
+  id: 'idea' | 'research' | 'script' | 'production' | 'edit' | 'release' | 'growth';
+  label: string;
+  detail: string;
+  statuses: ProjectStatus[];
+}
+
+const stageGroups: StageGroup[] = [
+  { id: 'idea', label: 'Idea', detail: 'Backlog → Selected', statuses: ['idea-backlog', 'selected'] },
+  { id: 'research', label: 'Research', detail: 'Research → Sources', statuses: ['researching', 'sources-verified'] },
+  { id: 'script', label: 'Script', detail: 'Hook → Approved', statuses: ['hook-ready', 'script-draft', 'script-approved'] },
+  { id: 'production', label: 'Production', detail: 'Storyboard → CapCut', statuses: ['storyboard', 'assets-needed', 'capcut-draft'] },
+  { id: 'edit', label: 'Edit', detail: 'Editing', statuses: ['editing'] },
+  { id: 'release', label: 'Release', detail: 'QA → Published', statuses: ['qa', 'scheduled', 'published'] },
+  { id: 'growth', label: 'Growth', detail: 'Analytics → Archive', statuses: ['analytics-review', 'repurpose', 'archived'] },
+];
+
 let channelFilter = '';
 let languageFilter = 'all';
 let formatFilter = 'all';
-let compactMode = false;
 
-const stageIndex = workflowStageRank;
+const projectGroup = (status: ProjectStatus): StageGroup => stageGroups.find((group) => group.statuses.includes(status)) ?? stageGroups[0];
 
 const projectCard = (project: VideoProject, activeId?: string): string => {
   const workspace = getWorkspace();
   const channel = workspace.channels.find((candidate) => candidate.id === project.channelId);
-  const overdue = project.deadline < todayIso() && !['published', 'archived'].includes(project.status);
+  const complete = isProductionComplete(project);
+  const overdue = project.deadline < todayIso() && !complete && project.status !== 'archived';
   const currentTask = workspace.calendarTasks.find((task) => task.projectId === project.id && !task.completed && task.sourceStatus === project.status);
-  return `<article class="kan-card ${overdue ? 'overdue' : ''} ${project.id === activeId ? 'active-project' : ''}" draggable="true" data-project-id="${escapeHtml(project.id)}" tabindex="0">
-    <button type="button" class="card-open" data-action="open-project" data-id="${escapeHtml(project.id)}"><div class="card-top"><span class="channel-dot ${channel?.role ?? 'backlog'}"></span><span>${escapeHtml(channel?.name ?? 'Unassigned')}</span>${dataBadge(project.isDemo)}</div><h3>${escapeHtml(project.title)}</h3><p>${escapeHtml(currentTask?.title ?? (project.hook || project.series || 'ยังไม่มี Mission'))}</p><div class="chip-row">${chip(project.language.toUpperCase(), project.language === 'en' ? 'cyan' : 'amber')}${chip(project.format, project.format === 'shorts' ? '' : 'violet')}${project.riskLevel !== 'low' ? chip(project.riskLevel, 'amber') : ''}</div><div class="card-footer"><span>${overdue ? 'Overdue' : `Due ${project.deadline}`}</span><span>${project.actualCredits || `${project.creditEstimateLow}–${project.creditEstimateHigh}`} cr</span></div></button>
+  const publish = project.publishAt ?? project.deadline;
+  const link = project.publicationLinks[0];
+  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(project.updatedAt).getTime()) / 3_600_000));
+  return `<article class="flow-video-card ${overdue ? 'overdue' : ''} ${project.id === activeId ? 'active-project' : ''} ${complete ? 'video-complete' : ''}" data-project-id="${escapeHtml(project.id)}">
+    <button type="button" class="flow-video-open" data-flow-open-project="${escapeHtml(project.id)}">
+      <div class="flow-card-top"><span class="channel-dot ${channel?.role ?? 'backlog'}"></span><span>${escapeHtml(channel?.name ?? 'Unassigned')}</span>${dataBadge(project.isDemo)}</div>
+      ${complete ? '<span class="video-complete-badge">VIDEO COMPLETE · 100%</span>' : `<span class="detail-stage">${escapeHtml(statusLabels[project.status])}</span>`}
+      <h3>${escapeHtml(project.title)}</h3>
+      <p>${escapeHtml(currentTask?.title ?? project.hook ?? 'Open the video context to continue.')}</p>
+      <div class="flow-card-meta"><span>${escapeHtml(project.format === 'long' ? 'Long-form' : 'Shorts')}</span><span>${elapsed < 1 ? '<1h' : `${elapsed}h`} in stage</span></div>
+      <div class="flow-card-publish"><span>${overdue ? 'Overdue' : 'Publish'}</span><b>${escapeHtml(publish.replace('T', ' '))}</b></div>
+    </button>
+    ${complete && link ? `<a class="publication-link" href="${escapeHtml(link)}" target="_blank" rel="noreferrer">View published video →</a>` : ''}
   </article>`;
 };
 
 const projectDialog = (project: VideoProject): void => {
   const workspace = getWorkspace();
   const channel = workspace.channels.find((candidate) => candidate.id === project.channelId);
-  const body = `<form id="project-editor" class="project-editor"><div class="summary-grid">${metric('Channel', channel?.name ?? 'Unassigned')}${metric('Status', statusLabels[project.status])}${metric('Language', project.language.toUpperCase())}${metric('Credits', project.actualCredits || `${project.creditEstimateLow}–${project.creditEstimateHigh}`)}</div><div class="form-grid two"><label><span>Title</span><input name="title" value="${escapeHtml(project.title)}" required></label><label><span>Deadline</span><input name="deadline" type="date" value="${escapeHtml(project.deadline)}" required></label><label><span>Owner</span><input name="owner" value="${escapeHtml(project.owner)}"></label><label><span>Estimate minutes</span><input name="estimatedMinutes" type="number" min="1" value="${project.estimatedMinutes}"></label><label><span>Budget THB</span><input name="budgetThb" type="number" min="0" value="${project.budgetThb}"></label><label><span>Current stage</span><input value="${escapeHtml(statusLabels[project.status])}" disabled></label></div><label><span>Research summary</span><textarea name="researchSummary" rows="3">${escapeHtml(project.researchSummary)}</textarea></label><label><span>Fact-check summary</span><textarea name="factCheckSummary" rows="3">${escapeHtml(project.factCheckSummary)}</textarea></label><label><span>Hook</span><textarea name="hook" rows="3">${escapeHtml(project.hook)}</textarea></label><label><span>Script</span><textarea name="script" rows="7">${escapeHtml(project.script)}</textarea></label><label><span>Lessons learned</span><textarea name="lessons" rows="3">${escapeHtml(project.lessonsLearned)}</textarea></label><div class="project-links"><button type="button" class="btn primary" data-action="project-mission">Mission Control</button><button type="button" class="btn ghost" data-action="project-prompt">Prompt Studio</button><button type="button" class="btn ghost" data-action="project-capcut">CapCut Lab</button><button type="button" class="btn ghost" data-action="project-calendar">Calendar</button><button type="button" class="btn ghost" data-action="project-policy">Policy</button></div><div class="dialog-actions"><button type="button" class="btn danger" data-action="archive-project">Archive</button><button type="submit" class="btn primary">Save project</button></div></form>`;
-  const dialog = openDialog(project.title, body, 'xl');
-  dialog.querySelector<HTMLFormElement>('#project-editor')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget as HTMLFormElement);
-    updateWorkspace((draft) => {
-      const target = draft.projects.find((candidate) => candidate.id === project.id);
-      if (!target) return;
-      target.title = String(data.get('title') ?? '').trim(); target.deadline = String(data.get('deadline') ?? target.deadline); target.owner = String(data.get('owner') ?? target.owner).trim(); target.estimatedMinutes = Number(data.get('estimatedMinutes')) || target.estimatedMinutes; target.budgetThb = Number(data.get('budgetThb')) || 0; target.researchSummary = String(data.get('researchSummary') ?? '').trim(); target.factCheckSummary = String(data.get('factCheckSummary') ?? '').trim(); target.hook = String(data.get('hook') ?? '').trim(); target.script = String(data.get('script') ?? '').trim(); target.lessonsLearned = String(data.get('lessons') ?? '').trim(); target.updatedAt = new Date().toISOString(); applyProjectFocus(draft, target.id);
-    });
-    dialog.close(); showToast('บันทึก Project แล้ว');
-  });
-  dialog.querySelector('[data-action="archive-project"]')?.addEventListener('click', () => { updateWorkspace((draft) => { const target = draft.projects.find((candidate) => candidate.id === project.id); if (target) { target.status = 'archived'; syncNextWorkflowMission(draft, target.id); } }); dialog.close(); });
-  const go = (action: string, route: string) => dialog.querySelector(`[data-action="${action}"]`)?.addEventListener('click', () => { dialog.close(); updateWorkspace((draft) => applyProjectFocus(draft, project.id)); navigate(route, { project: project.id }); });
-  go('project-mission', 'mission'); go('project-prompt', 'prompts'); go('project-capcut', 'capcut'); go('project-calendar', 'calendar'); go('project-policy', 'policy');
+  const recommendedRoute = project.status === 'qa' || project.status === 'scheduled' ? 'policy' : ['storyboard', 'assets-needed', 'capcut-draft', 'editing'].includes(project.status) ? 'capcut' : ['published', 'analytics-review', 'repurpose'].includes(project.status) ? 'analytics' : 'prompts';
+  const recommendedLabel = recommendedRoute === 'policy' ? 'Policy Shield' : recommendedRoute === 'capcut' ? 'CapCut Lab' : recommendedRoute === 'analytics' ? 'Insights' : 'Prompt Studio';
+  const complete = isProductionComplete(project);
+  const body = `<div class="context-project-summary"><span class="kicker">${escapeHtml(channel?.name ?? 'Unassigned')} · ${escapeHtml(projectGroup(project.status).label)}</span><h3>${escapeHtml(project.title)}</h3><div class="row wrap">${chip(statusLabels[project.status], complete ? 'green' : 'violet')}${chip(project.format === 'long' ? 'Long-form' : 'Shorts', project.format === 'long' ? 'amber' : 'cyan')}${complete ? chip('Video Complete', 'green') : ''}</div></div>
+    <div class="context-project-grid"><div><span>Publish</span><b>${escapeHtml((project.publishAt ?? project.deadline).replace('T', ' '))}</b></div><div><span>Risk</span><b>${escapeHtml(project.riskLevel)}</b></div><div><span>Credits</span><b>${project.actualCredits || `${project.creditEstimateLow}–${project.creditEstimateHigh}`}</b></div></div>
+    ${complete ? `<div class="video-complete-panel"><strong>Production finished</strong><span>Growth work is now separate from production completion.</span>${project.publicationLinks[0] ? `<a href="${escapeHtml(project.publicationLinks[0])}" target="_blank" rel="noreferrer">Open publication →</a>` : ''}</div>` : `<div class="recommended-tool"><span>RECOMMENDED NOW</span><strong>${recommendedLabel}</strong><p>Open the stage-specific workspace with this video already selected.</p></div>`}
+    <div class="context-tool-actions"><button class="btn primary" data-context-route="${recommendedRoute}">${recommendedLabel}</button><button class="btn" data-context-route="mission">Mission</button><button class="btn" data-context-route="calendar">Calendar</button><button class="btn" data-context-route="prompts">Prompt Studio</button><button class="btn" data-context-route="capcut">CapCut Lab</button><button class="btn" data-context-route="policy">Policy Shield</button></div>`;
+  const dialog = openDialog(project.title, body, 'lg');
+  dialog.querySelectorAll<HTMLElement>('[data-context-route]').forEach((control) => control.addEventListener('click', () => {
+    const route = control.dataset.contextRoute;
+    if (!route) return;
+    updateWorkspace((draft) => applyProjectFocus(draft, project.id));
+    dialog.close();
+    navigate(route, { project: project.id });
+  }));
+};
+
+const projectDate = (days: number): string => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 };
 
 const newProjectDialog = (): void => {
   const workspace = getWorkspace();
   const channel = activeChannel(workspace) ?? workspace.channels[0];
-  const body = `<form id="new-project-form"><div class="form-grid two"><label><span>Title</span><input name="title" required placeholder="New video title"></label><label><span>Channel</span><select name="channelId" required>${workspace.channels.map((item) => `<option value="${item.id}" ${item.id === channel?.id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label><label><span>Language</span><select name="language"><option value="en">English</option><option value="th">ไทย</option></select></label><label><span>Format</span><select name="format"><option value="shorts">Shorts</option><option value="long">Long-form</option></select></label><label><span>Deadline</span><input name="deadline" type="date" value="${addDays(todayIso(), 5)}"></label><label><span>Target duration (sec)</span><input name="duration" type="number" value="55" min="10"></label></div><label><span>Series</span><input name="series" placeholder="Series name"></label><div class="dialog-actions"><button type="submit" class="btn primary">Create project and workflow</button></div></form>`;
-  const dialog = openDialog('Add video project', body, 'md');
-  dialog.querySelector<HTMLFormElement>('#new-project-form')?.addEventListener('submit', (event) => {
+  if (!channel) { showToast('สร้าง Channel ก่อนสร้างวิดีโอ', 'warning'); navigate('blueprint'); return; }
+  const defaultPublish = `${projectDate(5)}T${workspace.settings.defaultPublishTime || '19:00'}`;
+  const body = `<form id="flow-new-project" class="stack"><input type="hidden" name="channelId" value="${escapeHtml(channel.id)}"/><div class="field"><label>Topic / title</label><input class="input" name="title" required placeholder="New video title"></div><div class="form-grid two"><div class="field"><label>Format</label><select class="select" name="format"><option value="shorts">Shorts</option><option value="long">Long-form</option></select></div><div class="field"><label>Publish date & time</label><input class="input" type="datetime-local" name="deadline" value="${defaultPublish}" required></div></div><div class="dialog-actions"><button class="btn primary" type="submit">Create Video & Plan Calendar</button></div></form>`;
+  const dialog = openDialog('Create Video', body, 'md');
+  dialog.querySelector<HTMLFormElement>('#flow-new-project')?.addEventListener('submit', (event) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget as HTMLFormElement); const channelId = String(data.get('channelId')); const ownerChannel = workspace.channels.find((candidate) => candidate.id === channelId)!; const idea = workspace.ideas.find((candidate) => candidate.id === ownerChannel.ideaId); const format = String(data.get('format')) as 'shorts' | 'long'; const now = new Date().toISOString();
-    const project: VideoProject = { id: uid('project'), title: String(data.get('title')).trim(), channelId, ideaId: ownerChannel.ideaId, series: String(data.get('series') ?? '').trim(), language: String(data.get('language')) as 'en' | 'th', platforms: format === 'shorts' ? ['YouTube Shorts'] : ['YouTube'], format, targetDurationSeconds: Number(data.get('duration')) || (format === 'shorts' ? 55 : 480), deadline: String(data.get('deadline')), owner: 'Nat', estimatedMinutes: idea?.score[ownerChannel.language].productionMinutes ?? 120, budgetThb: 0, creditEstimateLow: idea?.score[ownerChannel.language].estimatedCreditsLow ?? 40, creditEstimateHigh: idea?.score[ownerChannel.language].estimatedCreditsHigh ?? 120, actualCredits: 0, status: 'selected', sourceIds: [], researchSummary: '', factCheckSummary: '', scriptVersion: 0, script: '', hook: '', storyboard: [], assetPrompts: [], capcutBrief: '', promptVersions: [], thumbnailVersions: [], publicationLinks: [], lessonsLearned: '', analyticsPostmortem: '', repurposingPlan: '', workflowEvents: [], policyChecks: {}, riskLevel: idea?.score[ownerChannel.language].copyrightRisk ?? 'review', createdAt: now, updatedAt: now };
-    updateWorkspace((draft) => { draft.projects.push(project); const tasks = buildWorkflowTasks(draft, project); draft.calendarTasks.push(...tasks); applyProjectFocus(draft, project.id, tasks[0]?.id); awardXp(draft, `project-created:${project.id}`, 35, 'topicSelection'); }); dialog.close(); showToast('สร้าง Project และ Workflow missions แล้ว'); navigate('mission', { project: project.id });
+    const form = event.currentTarget as HTMLFormElement;
+    dialog.close();
+    createProjectFromForm(form);
   });
 };
 
@@ -66,25 +102,37 @@ export const renderPipeline = (): View => {
   const focusedChannel = activeChannel(workspace);
   const focusedProject = activeProject(workspace);
   const effectiveChannel = channelFilter || (workspace.focus.mode === 'channel' ? focusedChannel?.id ?? 'all' : 'all');
-  const requestedProject = getQuery().get('project');
-  const projects = workspace.projects.filter((project) => (effectiveChannel === 'all' || project.channelId === effectiveChannel) && (languageFilter === 'all' || project.language === languageFilter) && (formatFilter === 'all' || project.format === formatFilter));
-  const wip = projects.filter((project) => ['researching', 'sources-verified', 'hook-ready', 'script-draft', 'script-approved', 'storyboard', 'assets-needed', 'capcut-draft', 'editing', 'qa'].includes(project.status)).length;
-  const columns = statuses.map((status) => { const cards = projects.filter((project) => project.status === status.id); return `<section class="kan-column ${compactMode ? 'compact' : ''}" data-status="${status.id}"><div class="kan-column-head"><span>${escapeHtml(status.label)}</span><b>${cards.length}</b></div><div class="kan-dropzone" data-drop-status="${status.id}">${cards.map((item) => projectCard(item, focusedProject?.id)).join('') || '<div class="kan-empty">Drop here</div>'}</div></section>`; }).join('');
-  const html = `${pageHeader('Production Pipeline', 'Pipeline เป็นตัวกำหนด Mission และ Prompt ถัดไป; การเลื่อนไปข้างหน้าต้องผ่าน Completion Gate', `${button('Add video project', 'add-project', 'primary', 'plus')}${button(compactMode ? 'Comfort view' : 'Compact view', 'toggle-compact', 'ghost')}<a class="btn" href="${routeHref('mission', focusedProject ? { project: focusedProject.id } : undefined)}">Mission Control</a>`)}<section class="hq-focus-strip pipeline-focus-strip"><div><span class="kicker">Channel Focus</span><h3>${escapeHtml(focusedChannel?.name ?? 'Portfolio')}</h3><p>${effectiveChannel === 'all' ? 'All channels visible' : 'Board scoped to one channel'}</p></div><div><span class="kicker">Active Project</span><h3>${escapeHtml(focusedProject?.title ?? 'None')}</h3><p>${focusedProject ? statusLabels[focusedProject.status] : 'Select a card'}</p></div><div class="focus-strip-actions"><button class="btn" data-action="open-focus-picker">Change focus</button></div></section><div class="pipeline-toolbar panel"><div class="pipeline-filters"><label><span>Channel</span><select id="pipeline-channel"><option value="all">Portfolio · all channels</option>${workspace.channels.map((item) => `<option value="${item.id}" ${effectiveChannel === item.id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label><label><span>Language</span><select id="pipeline-language"><option value="all">All</option><option value="en" ${languageFilter === 'en' ? 'selected' : ''}>EN</option><option value="th" ${languageFilter === 'th' ? 'selected' : ''}>TH</option></select></label><label><span>Format</span><select id="pipeline-format"><option value="all">All</option><option value="shorts" ${formatFilter === 'shorts' ? 'selected' : ''}>Shorts</option><option value="long" ${formatFilter === 'long' ? 'selected' : ''}>Long-form</option></select></label></div><div class="wip-meter"><span>WIP Limit</span><strong class="${wip > 8 ? 'risk' : ''}">${wip} / 8</strong><div class="mini-track"><i style="width:${Math.min(100, (wip / 8) * 100)}%"></i></div><small>${wip >= 8 ? 'ปิดงานก่อนเปิดเพิ่ม' : 'Capacity available'}</small></div><div class="pipeline-summary">${metric('Visible', projects.length)}${metric('Overdue', projects.filter((item) => item.deadline < todayIso() && !['published', 'archived'].includes(item.status)).length)}${metric('Review risk', projects.filter((item) => item.riskLevel !== 'low').length)}</div></div><div class="kanban-board" aria-label="Production stages">${columns}</div>`;
+  const projects = workspace.projects.filter((project) =>
+    (effectiveChannel === 'all' || project.channelId === effectiveChannel)
+    && (languageFilter === 'all' || project.language === languageFilter)
+    && (formatFilter === 'all' || project.format === formatFilter));
+  const productionWip = projects.filter((project) => !isProductionComplete(project) && !['analytics-review', 'repurpose', 'archived'].includes(project.status)).length;
+  const groups = stageGroups.map((group) => {
+    const cards = projects.filter((project) => group.statuses.includes(project.status));
+    return `<section class="flow-group flow-group-${group.id}" data-stage-group="${group.id}"><div class="flow-group-head"><div><span>${escapeHtml(group.label)}</span><small>${escapeHtml(group.detail)}</small></div><b>${cards.length}</b></div><div class="flow-group-cards">${cards.map((project) => projectCard(project, focusedProject?.id)).join('') || '<div class="flow-empty">No videos</div>'}</div>${group.id === 'growth' ? '<div class="growth-loop-note"><span>GROWTH LOOP</span><p>Analytics → Post-mortem → Repurpose → Archive</p><small>Separate from production progress.</small></div>' : ''}</section>`;
+  }).join('');
+
+  const html = `${pageHeader('Production', 'A seven-group Production Flow that preserves the detailed workflow and its completion gates.', `${button('Create Video', 'add-project', 'primary', 'plus')}<a class="btn" href="${routeHref('mission', focusedProject ? { project: focusedProject.id } : undefined)}">Current Mission</a>`)}
+    <section class="production-focus-strip"><div><span class="kicker">Channel Focus</span><strong>${escapeHtml(focusedChannel?.name ?? 'Portfolio · All Channels')}</strong></div><div><span class="kicker">Active Video</span><strong>${escapeHtml(focusedProject?.title ?? 'None')}</strong><small>${focusedProject ? escapeHtml(statusLabels[focusedProject.status]) : 'Select a video card'}</small></div><button class="btn" data-action="open-focus-picker">Change focus</button></section>
+    <section class="pipeline-toolbar panel"><div class="pipeline-filters"><label><span>Channel</span><select id="pipeline-channel"><option value="all">Portfolio · All Channels</option>${workspace.channels.map((item) => `<option value="${escapeHtml(item.id)}" ${effectiveChannel === item.id ? 'selected' : ''}>${escapeHtml(item.name)}</option>`).join('')}</select></label><label><span>Language</span><select id="pipeline-language"><option value="all">All</option><option value="en" ${languageFilter === 'en' ? 'selected' : ''}>EN</option><option value="th" ${languageFilter === 'th' ? 'selected' : ''}>TH</option></select></label><label><span>Format</span><select id="pipeline-format"><option value="all">All</option><option value="shorts" ${formatFilter === 'shorts' ? 'selected' : ''}>Shorts</option><option value="long" ${formatFilter === 'long' ? 'selected' : ''}>Long-form</option></select></label></div><div class="pipeline-summary">${metric('Visible', projects.length)}${metric('Production WIP', productionWip)}${metric('Video Complete', projects.filter(isProductionComplete).length)}</div></section>
+    <div class="production-flow-board" aria-label="Production Flow groups">${groups}</div>`;
+
   return { html, mount: () => {
-    const moveProject = (projectId: string, nextStatus: ProjectStatus): void => {
-      const currentWorkspace = getWorkspace(); const project = currentWorkspace.projects.find((item) => item.id === projectId); if (!project || project.status === nextStatus) return; const currentIndex = stageIndex(project.status); const nextIndex = stageIndex(nextStatus);
-      if (nextIndex > currentIndex) {
-        const expected = workflowStatuses[currentIndex + 1]; const readiness = workflowReadiness(currentWorkspace, project, expected);
-        if (nextStatus !== expected || !readiness.ready) { updateWorkspace((draft) => applyProjectFocus(draft, project.id)); showToast(readiness.blockers[0] ?? 'ทำ Mission ของขั้นนี้ก่อนเลื่อน Pipeline', 'warning'); navigate('mission', { project: project.id }); return; }
-      }
-      updateWorkspace((draft) => { const target = draft.projects.find((item) => item.id === projectId); if (!target) return; const previous = target.status; target.status = nextStatus; target.updatedAt = new Date().toISOString(); recordWorkflowEvent(target, { type: 'stage-advanced', note: `Pipeline moved to ${statusLabels[nextStatus]}`, fromStatus: previous, toStatus: nextStatus }); syncNextWorkflowMission(draft, target.id); applyProjectFocus(draft, target.id, draft.calendarTasks.find((task) => task.projectId === target.id && !task.completed && task.sourceStatus === target.status)?.id); awardXp(draft, `stage:${target.id}:${nextStatus}`, 35, 'consistency'); }); showToast(`ย้ายไป ${statusLabels[nextStatus]}`);
-    };
-    const setFilter = (id: string, setter: (value: string) => void) => document.querySelector<HTMLSelectElement>(id)?.addEventListener('change', (event) => { setter((event.currentTarget as HTMLSelectElement).value); requestRender(); });
-    setFilter('#pipeline-channel', (value) => { channelFilter = value; updateWorkspace((draft) => { if (value === 'all') draft.focus.mode = 'portfolio'; else applyChannelFocus(draft, value); }); }); setFilter('#pipeline-language', (value) => { languageFilter = value; }); setFilter('#pipeline-format', (value) => { formatFilter = value; });
-    document.querySelector('[data-action="add-project"]')?.addEventListener('click', newProjectDialog); document.querySelector('[data-action="toggle-compact"]')?.addEventListener('click', () => { compactMode = !compactMode; requestRender(); }); document.querySelectorAll<HTMLElement>('[data-action="open-project"]').forEach((element) => element.addEventListener('click', () => { const project = workspace.projects.find((candidate) => candidate.id === element.dataset.id); if (project) { updateWorkspace((draft) => applyProjectFocus(draft, project.id)); projectDialog(project); } }));
-    let draggedId = ''; document.querySelectorAll<HTMLElement>('[draggable="true"]').forEach((card) => { card.addEventListener('dragstart', (event) => { draggedId = card.dataset.projectId ?? ''; card.classList.add('dragging'); event.dataTransfer?.setData('text/plain', draggedId); }); card.addEventListener('dragend', () => card.classList.remove('dragging')); card.addEventListener('keydown', (event) => { if (!['ArrowRight', 'ArrowLeft'].includes(event.key)) return; event.preventDefault(); const project = workspace.projects.find((candidate) => candidate.id === card.dataset.projectId); if (!project) return; const index = Math.max(0, Math.min(statuses.length - 1, stageIndex(project.status) + (event.key === 'ArrowRight' ? 1 : -1))); moveProject(project.id, statuses[index].id); }); });
-    document.querySelectorAll<HTMLElement>('[data-drop-status]').forEach((zone) => { zone.addEventListener('dragover', (event) => { event.preventDefault(); zone.classList.add('drag-over'); }); zone.addEventListener('dragleave', () => zone.classList.remove('drag-over')); zone.addEventListener('drop', (event) => { event.preventDefault(); zone.classList.remove('drag-over'); moveProject(event.dataTransfer?.getData('text/plain') || draggedId, zone.dataset.dropStatus as ProjectStatus); }); });
-    if (requestedProject) { const project = workspace.projects.find((candidate) => candidate.id === requestedProject); if (project) window.setTimeout(() => projectDialog(project), 50); }
+    document.querySelector('#pipeline-channel')?.addEventListener('change', (event) => {
+      channelFilter = (event.target as HTMLSelectElement).value;
+      const value = channelFilter;
+      if (value !== 'all') updateWorkspace((draft) => applyChannelFocus(draft, value));
+      requestRender();
+    });
+    document.querySelector('#pipeline-language')?.addEventListener('change', (event) => { languageFilter = (event.target as HTMLSelectElement).value; requestRender(); });
+    document.querySelector('#pipeline-format')?.addEventListener('change', (event) => { formatFilter = (event.target as HTMLSelectElement).value; requestRender(); });
+    document.querySelectorAll<HTMLElement>('[data-flow-open-project]').forEach((card) => card.addEventListener('click', () => {
+      const projectId = card.dataset.flowOpenProject;
+      const project = getWorkspace().projects.find((item) => item.id === projectId);
+      if (!project) return;
+      updateWorkspace((draft) => applyProjectFocus(draft, project.id));
+      projectDialog(project);
+    }));
+    document.querySelector('[data-action="add-project"]')?.addEventListener('click', newProjectDialog);
   } };
 };
