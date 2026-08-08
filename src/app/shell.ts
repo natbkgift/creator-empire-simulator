@@ -9,7 +9,6 @@ import { getStorageStatus } from '../db/storage.js';
 export interface ToastState { title: string; detail: string; reward?: string; }
 
 export const renderShell = (workspace: Workspace, route: string, content: string, toast?: ToastState | null): string => {
-  const levelProgress = Math.min(100, Math.round(((workspace.xp % Math.max(1, workspace.level * 180)) / Math.max(1, workspace.level * 180)) * 100));
   const nav = navigation.map((item) => `<a class="nav-dot ${item.route === route ? 'active' : ''}" href="${routeHref(item.route)}" aria-label="${escapeHtml(item.label)}" title="${escapeHtml(item.label)}">${icon(item.icon)}<span>${escapeHtml(item.shortLabel)}</span></a>`).join('');
   const mobileNav = navigation.filter((item) => primaryMobileNavigation.includes(item.route)).map((item) => `<a class="mobile-nav ${item.route === route ? 'active' : ''}" href="${routeHref(item.route)}">${icon(item.icon)}<span>${escapeHtml(item.shortLabel)}</span></a>`).join('');
   const channel = activeChannel(workspace);
@@ -48,7 +47,6 @@ export const renderShell = (workspace: Workspace, route: string, content: string
           <div class="hud">
             <button class="hud-command" data-action="open-command" aria-label="ค้นหา">${icon('search')}</button>
             <a class="hud-command" href="${routeHref('settings')}" aria-label="Settings" title="Settings">${icon('gear')}</a>
-            <div class="hud-item"><span class="orb"></span><div><b>Lv ${workspace.level}</b><small>${formatNumber(workspace.xp)} XP · ${levelProgress}%</small></div></div>
             <div class="hud-item"><span class="orb" style="background:var(--amber)"></span><div><b>${formatNumber(workspace.settings.capcutBalance)}</b><small>CapCut credits</small></div></div>
             <div class="hud-item storage-hud"><span class="orb" style="background:${storageHealthy ? 'var(--green)' : 'var(--amber)'}"></span><div><b>${storage.mode === 'hybrid' ? 'SQLite + backup' : storage.mode === 'sqlite' ? 'SQLite' : 'Offline backup'}</b><small>${escapeHtml(storage.detail)}</small></div></div>
           </div>
