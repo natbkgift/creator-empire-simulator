@@ -29,6 +29,7 @@ def workspace(name: str, revision: int = 0) -> dict:
         "updatedAt": server.now_iso(),
         "settings": {
             "openAiModel": "mock-openai",
+            "openAiAdvancedModel": "mock-openai-advanced",
             "geminiModel": "mock-gemini",
             "aiMaxOutputTokens": 500,
             "aiRequestTimeoutSeconds": 15,
@@ -36,6 +37,8 @@ def workspace(name: str, revision: int = 0) -> dict:
             "aiMonthlyBudgetUsd": 100,
             "openAiInputUsdPer1M": 1,
             "openAiOutputUsdPer1M": 2,
+            "openAiAdvancedInputUsdPer1M": 10,
+            "openAiAdvancedOutputUsdPer1M": 20,
             "geminiInputUsdPer1M": 1,
             "geminiOutputUsdPer1M": 2,
             "geminiSearchUsdPerQuery": 0.014,
@@ -106,7 +109,7 @@ def main() -> None:
         server.save_workspace({"workspace": workspace("ai-mock", 4)})
         server.SESSION_KEYS["openai"] = "sk-test-only"
         original = server.call_openai
-        server.call_openai = lambda prompt, model, api_key, max_output_tokens, timeout: ('{"ok":true}', 100, 50)
+        server.call_openai = lambda prompt, model, api_key, max_output_tokens, timeout, prompt_type, reasoning_effort: ('{"ok":true}', 100, 50)
         try:
             generated = server.ai_generate({"provider": "openai", "model": "mock-openai", "prompt": "test", "maxOutputTokens": 500})
         finally:
@@ -121,10 +124,19 @@ def main() -> None:
         source = inspect.getsource(server.call_openai)
         assert_true('"store": False' in source, "OpenAI Responses call must set store=false")
         assert_true('"max_output_tokens": max_output_tokens' in source, "OpenAI output bound missing")
+        assert_true('"type": "json_schema"' in source and '"strict": True' in source, "OpenAI strict structured output missing")
         post_source = inspect.getsource(server.post_json)
         assert_true("attempts: int = 4" in post_source and "Retry-After" in post_source and "time.sleep" in post_source, "retry/backoff contract missing")
         assert_true("provider response bodies" in post_source.lower(), "provider error-body redaction contract missing")
-        print("PASS OpenAI store=false, output bound, timeout/retry and error-redaction guardrails are present")
+        luna_route = server.route_openai_model(workspace("router")["settings"], "hook-generator")
+        terra_route = server.route_openai_model(workspace("router")["settings"], "fact-check")
+        override_route = server.route_openai_model(workspace("router")["settings"], "long-script", True)
+        assert_true(luna_route == ("mock-openai", "luna", "low"), "default OpenAI route must use Luna/low")
+        assert_true(terra_route == ("mock-openai-advanced", "terra", "medium"), "complex OpenAI route must use Terra/medium")
+        assert_true(override_route == terra_route, "important script override must promote to Terra")
+        assert_true(len(server.OPENAI_ADVANCED_PROMPT_TYPES) == 3, "Terra default share must be 3 of 16 workflows")
+        assert_true(server.openai_response_schema("shorts-script")["additionalProperties"] is False, "OpenAI schema must reject extra root fields")
+        print("PASS OpenAI structured outputs, 81.25/18.75 router, store=false, timeout/retry and redaction guardrails are present")
 
         gemini_source = inspect.getsource(server.call_gemini)
         assert_true('generation_config["responseSchema"] = schema' in gemini_source, "Gemini structured JSON schema mode missing")

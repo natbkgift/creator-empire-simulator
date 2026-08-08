@@ -7,6 +7,8 @@ import { promptCompletionStatus, workflowReadiness, workflowRecommendation } fro
 import { chip, pageHeader } from '../ui/components.js';
 import { icon } from '../ui/icons.js';
 
+export const openAiTerraPromptTypes = new Set<PromptType>(['niche-research', 'fact-check', 'analytics-postmortem']);
+
 export const renderPrompts = (workspace: Workspace, params: URLSearchParams, parsedResponse?: string): string => {
   const focused = activeProject(workspace);
   const requested = projectById(workspace, params.get('project') ?? undefined);
@@ -16,6 +18,7 @@ export const renderPrompts = (workspace: Workspace, params: URLSearchParams, par
   const recommendation = project ? workflowRecommendation(workspace, project) : undefined;
   const recommendedType = recommendation?.promptType ?? (project?.format === 'long' ? 'long-script' : 'shorts-script');
   const type = (promptTypes.some((item) => item.id === params.get('type')) ? params.get('type') : recommendedType) as PromptType;
+  const terraRouted = openAiTerraPromptTypes.has(type);
   const language = (params.get('lang') === 'th' ? 'th' : project?.language ?? channel?.language ?? 'en') as Language;
   const advanced = params.get('advanced') === '1';
   const shorter = params.get('short') === '1';
@@ -53,7 +56,7 @@ export const renderPrompts = (workspace: Workspace, params: URLSearchParams, par
       <section class="panel prompt-document">
         <div class="doc-toolbar"><strong>${escapeHtml(promptTypes.find((item) => item.id === type)?.name ?? type)}</strong><span class="chip cyan">${workspace.settings.workflowMode === 'automatic' ? `${chip('Automatic AI','green')}` : `${chip('Manual copy','cyan')}`}<span class="spacer"></span><a class="btn" href="${routeParams({ short: shorter ? '0' : '1' })}">${shorter ? 'Full' : 'Shorter'}</a><a class="btn" href="${routeParams({ advanced: advanced ? '0' : '1' })}">${advanced ? 'Basic' : 'Advanced'}</a><button class="btn" data-action="save-prompt">Save</button></div>
         <div class="doc-body"><textarea id="prompt-output" class="prompt-output" spellcheck="false">${escapeHtml(prompt)}</textarea></div>
-        <div class="schema-strip"><div class="schema-copy"><strong>Paste AI response (JSON)</strong><textarea id="prompt-response" class="textarea code" style="min-height:90px;margin-top:6px" placeholder='{"summary":"..."}'></textarea><div id="parse-result" class="parse-result">${escapeHtml(parsedResponse ?? 'ยังไม่มีผลลัพธ์ที่ Parse')}</div></div><div class="schema-actions">${workspace.settings.workflowMode === 'automatic' ? `<button class="btn primary" data-action="generate-with-ai">Generate with ${workspace.settings.aiProvider === 'openai' ? 'OpenAI' : 'Gemini'}</button>` : `<button class="btn primary" data-action="copy-prompt">${icon('copy')} Copy to ChatGPT</button>`}<button class="btn" data-action="parse-response" data-project-id="${escapeHtml(project.id)}" data-prompt-type="${escapeHtml(type)}">Parse, save & advance</button><button class="btn ${readiness.ready ? 'success' : ''}" data-action="complete-mission" data-project-id="${escapeHtml(project.id)}">Complete & advance</button></div></div>
+        <div class="schema-strip"><div class="schema-copy"><strong>Paste AI response (JSON)</strong><textarea id="prompt-response" class="textarea code" style="min-height:90px;margin-top:6px" placeholder='{"summary":"..."}'></textarea><div id="parse-result" class="parse-result">${escapeHtml(parsedResponse ?? 'ยังไม่มีผลลัพธ์ที่ Parse')}</div></div><div class="schema-actions">${workspace.settings.workflowMode === 'automatic' && workspace.settings.aiProvider === 'openai' ? `<label class="checkbox-row ai-model-route"><input id="openai-terra-override" type="checkbox" ${terraRouted ? 'checked disabled' : ''}/><span><strong>${terraRouted ? 'Terra · auto-routed' : 'Use Terra for this run'}</strong><br/>${terraRouted ? 'งานซับซ้อนตามนโยบาย 18.75%' : 'เปิดเมื่อเป็นสคริปต์สำคัญหรือหลายเงื่อนไข'}</span></label>` : ''}${workspace.settings.workflowMode === 'automatic' ? `<button class="btn primary" data-action="generate-with-ai">Generate with ${workspace.settings.aiProvider === 'openai' ? (terraRouted ? 'Terra' : 'Luna') : 'Gemini'}</button>` : `<button class="btn primary" data-action="copy-prompt">${icon('copy')} Copy to ChatGPT</button>`}<button class="btn" data-action="parse-response" data-project-id="${escapeHtml(project.id)}" data-prompt-type="${escapeHtml(type)}">Parse, save & advance</button><button class="btn ${readiness.ready ? 'success' : ''}" data-action="complete-mission" data-project-id="${escapeHtml(project.id)}">Complete & advance</button></div></div>
       </section>
     </div>`;
 };

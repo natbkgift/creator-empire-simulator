@@ -12,7 +12,8 @@ export const saveSettings = (form: HTMLFormElement): void => {
     draft.settings.capcutBalance = Math.max(0, numberFrom(data, 'capcutBalance'));
     draft.settings.workflowMode = stringFrom(data, 'workflowMode') === 'automatic' ? 'automatic' : 'manual';
     draft.settings.aiProvider = stringFrom(data, 'aiProvider') === 'gemini' ? 'gemini' : 'openai';
-    draft.settings.openAiModel = stringFrom(data, 'openAiModel', 'gpt-5.1') || 'gpt-5.1';
+    draft.settings.openAiModel = stringFrom(data, 'openAiModel', 'gpt-5.6-luna') || 'gpt-5.6-luna';
+    draft.settings.openAiAdvancedModel = stringFrom(data, 'openAiAdvancedModel', 'gpt-5.6-terra') || 'gpt-5.6-terra';
     draft.settings.geminiModel = stringFrom(data, 'geminiModel', 'gemini-3.5-flash') || 'gemini-3.5-flash';
     const geminiThinkingLevel = stringFrom(data, 'geminiThinkingLevel', 'low');
     draft.settings.geminiThinkingLevel = ['minimal', 'low', 'medium', 'high'].includes(geminiThinkingLevel) ? geminiThinkingLevel as 'minimal' | 'low' | 'medium' | 'high' : 'low';
@@ -23,8 +24,10 @@ export const saveSettings = (form: HTMLFormElement): void => {
     draft.settings.aiRequestTimeoutSeconds = Math.min(180, Math.max(10, numberFrom(data, 'aiRequestTimeoutSeconds', 60)));
     draft.settings.aiDailyBudgetUsd = Math.max(0, numberFrom(data, 'aiDailyBudgetUsd', 2));
     draft.settings.aiMonthlyBudgetUsd = Math.max(0, numberFrom(data, 'aiMonthlyBudgetUsd', 20));
-    draft.settings.openAiInputUsdPer1M = Math.max(0, numberFrom(data, 'openAiInputUsdPer1M', 0));
-    draft.settings.openAiOutputUsdPer1M = Math.max(0, numberFrom(data, 'openAiOutputUsdPer1M', 0));
+    draft.settings.openAiInputUsdPer1M = Math.max(0, numberFrom(data, 'openAiInputUsdPer1M', 0.2));
+    draft.settings.openAiOutputUsdPer1M = Math.max(0, numberFrom(data, 'openAiOutputUsdPer1M', 1.2));
+    draft.settings.openAiAdvancedInputUsdPer1M = Math.max(0, numberFrom(data, 'openAiAdvancedInputUsdPer1M', 2));
+    draft.settings.openAiAdvancedOutputUsdPer1M = Math.max(0, numberFrom(data, 'openAiAdvancedOutputUsdPer1M', 12));
     draft.settings.geminiInputUsdPer1M = Math.max(0, numberFrom(data, 'geminiInputUsdPer1M', 0));
     draft.settings.geminiOutputUsdPer1M = Math.max(0, numberFrom(data, 'geminiOutputUsdPer1M', 0));
     draft.settings.geminiSearchUsdPerQuery = Math.max(0, numberFrom(data, 'geminiSearchUsdPerQuery', 0.014));

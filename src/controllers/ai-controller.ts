@@ -250,10 +250,10 @@ export const testAiProvider = async (): Promise<void> => {
   const workspace = getWorkspace();
   const model = provider === 'openai' ? workspace.settings.openAiModel : workspace.settings.geminiModel;
   try {
-    const response = await fetch('/api/ai/generate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, model, maxOutputTokens: 128, prompt: 'Return only this JSON: {"ok":true,"message":"connected"}' }) });
-    const payload = await response.json() as { ok?: boolean; text?: string; error?: string; estimatedCostUsd?: number };
+    const response = await fetch('/api/ai/generate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, model, maxOutputTokens: 512, prompt: 'Return only this JSON: {"ok":true,"message":"connected"}' }) });
+    const payload = await response.json() as { ok?: boolean; text?: string; error?: string; model?: string; estimatedCostUsd?: number };
     if (!response.ok || !payload.ok) throw new Error(payload.error ?? JSON.stringify(payload).slice(0,180));
-    showToast(`${provider.toUpperCase()} test สำเร็จ${typeof payload.estimatedCostUsd === 'number' ? ` · ~$${payload.estimatedCostUsd.toFixed(4)}` : ''}`);
+    showToast(`${provider.toUpperCase()} test สำเร็จ · ${payload.model ?? model}${typeof payload.estimatedCostUsd === 'number' ? ` · ~$${payload.estimatedCostUsd.toFixed(4)}` : ''}`);
     await refreshAiStatus();
   } catch (error) {
     showToast(`${provider.toUpperCase()} test ไม่ผ่าน: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');
@@ -283,16 +283,17 @@ export const generateCurrentPromptWithAi = async (): Promise<void> => {
   const model = provider === 'openai' ? workspace.settings.openAiModel : workspace.settings.geminiModel;
   const routeType = parseRoute().params.get('type');
   const promptType = (promptTypes.some((item) => item.id === routeType) ? routeType : undefined) as PromptType | undefined;
-  output.value = `Generating with ${provider.toUpperCase()}…`;
+  const useAdvancedModel = provider === 'openai' && Boolean(document.querySelector<HTMLInputElement>('#openai-terra-override')?.checked);
+  output.value = `Generating with ${provider === 'openai' ? (useAdvancedModel ? 'OpenAI Terra' : 'OpenAI router') : provider.toUpperCase()}…`;
   try {
     const response = await fetch('/api/ai/generate', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ provider, model, prompt, promptType, maxOutputTokens: workspace.settings.aiMaxOutputTokens ?? 2500 }),
+      body: JSON.stringify({ provider, model, prompt, promptType, useAdvancedModel, maxOutputTokens: workspace.settings.aiMaxOutputTokens ?? 2500 }),
     });
-    const payload = await response.json() as { ok?: boolean; text?: string; error?: string; inputTokens?: number; outputTokens?: number; searchQueries?: number; estimatedCostUsd?: number };
+    const payload = await response.json() as { ok?: boolean; text?: string; error?: string; model?: string; modelTier?: string; reasoningEffort?: string; inputTokens?: number; outputTokens?: number; searchQueries?: number; estimatedCostUsd?: number };
     if (!response.ok || !payload.ok) throw new Error(payload.error ?? JSON.stringify(payload).slice(0,240));
     output.value = payload.text ?? '';
-    showToast(`AI response พร้อม Parse · ${provider.toUpperCase()} · ${payload.inputTokens ?? 0}/${payload.outputTokens ?? 0} tokens${payload.searchQueries ? ` · ${payload.searchQueries} searches` : ''}${typeof payload.estimatedCostUsd === 'number' ? ` · ~$${payload.estimatedCostUsd.toFixed(4)}` : ''}`);
+    showToast(`AI response พร้อม Parse · ${payload.model ?? provider.toUpperCase()}${payload.modelTier ? ` (${payload.modelTier})` : ''} · ${payload.inputTokens ?? 0}/${payload.outputTokens ?? 0} tokens${payload.searchQueries ? ` · ${payload.searchQueries} searches` : ''}${typeof payload.estimatedCostUsd === 'number' ? ` · ~$${payload.estimatedCostUsd.toFixed(4)}` : ''}`);
   } catch (error) {
     output.value = '';
     showToast(`AI Generate ไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');

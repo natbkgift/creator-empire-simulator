@@ -39,6 +39,10 @@ SUPPORTED_PROMPT_TYPES = (
     "shorts-script", "long-script", "storyboard", "capcut-standard", "capcut-director",
     "ai-image", "ai-video", "thumbnail-title", "repurposing", "analytics-postmortem", "next-video",
 )
+OPENAI_DEFAULT_MODEL = "gpt-5.6-luna"
+OPENAI_ADVANCED_MODEL = "gpt-5.6-terra"
+# 3 of 16 default routes use Terra (18.75%). Important scripts can be promoted per run.
+OPENAI_ADVANCED_PROMPT_TYPES = frozenset({"niche-research", "fact-check", "analytics-postmortem"})
 
 
 @contextlib.contextmanager
@@ -417,16 +421,20 @@ def ai_spend(period: str) -> float:
     return float(row[0] or 0)
 
 
-def provider_rates(provider: str, settings: dict[str, Any]) -> tuple[float, float]:
-    prefix = "openAi" if provider == "openai" else "gemini"
+def provider_rates(provider: str, settings: dict[str, Any], model: str = "") -> tuple[float, float]:
+    if provider == "openai":
+        advanced_model = str(settings.get("openAiAdvancedModel") or OPENAI_ADVANCED_MODEL).strip()
+        prefix = "openAiAdvanced" if model == advanced_model else "openAi"
+    else:
+        prefix = "gemini"
     return (
         numeric_setting(settings, f"{prefix}InputUsdPer1M", 0, 0, 1000),
         numeric_setting(settings, f"{prefix}OutputUsdPer1M", 0, 0, 1000),
     )
 
 
-def estimate_cost(provider: str, input_tokens: int, output_tokens: int, settings: dict[str, Any], search_queries: int = 0) -> float:
-    input_rate, output_rate = provider_rates(provider, settings)
+def estimate_cost(provider: str, input_tokens: int, output_tokens: int, settings: dict[str, Any], search_queries: int = 0, model: str = "") -> float:
+    input_rate, output_rate = provider_rates(provider, settings, model)
     token_cost = (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
     search_cost = search_queries * numeric_setting(settings, "geminiSearchUsdPerQuery", 0.014, 0, 10) if provider == "gemini" else 0
     return token_cost + search_cost
@@ -444,9 +452,9 @@ def budget_limits(settings: dict[str, Any]) -> tuple[float, float]:
     return daily, monthly
 
 
-def enforce_budget(provider: str, settings: dict[str, Any]) -> None:
+def enforce_budget(provider: str, settings: dict[str, Any], model: str = "") -> None:
     daily, monthly = budget_limits(settings)
-    input_rate, output_rate = provider_rates(provider, settings)
+    input_rate, output_rate = provider_rates(provider, settings, model)
     if (daily or monthly) and input_rate <= 0 and output_rate <= 0:
         raise RuntimeError(f"Configure current {provider} input/output USD per 1M token rates before enabling cost-capped AI Assisted mode")
     if daily and ai_spend("day") >= daily:
@@ -489,13 +497,72 @@ def post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeou
     raise last_error or RuntimeError("AI request failed")
 
 
-def call_openai(prompt: str, model: str, api_key: str, max_output_tokens: int, timeout: float) -> tuple[str, int, int]:
+def openai_response_schema(prompt_type: str) -> dict[str, Any] | None:
+    schema = gemini_response_schema(prompt_type)
+    if not schema:
+        return None
+
+    def strictify(node: Any) -> Any:
+        if isinstance(node, list):
+            return [strictify(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        result = {key: strictify(value) for key, value in node.items()}
+        if result.get("type") == "object":
+            properties = result.get("properties") if isinstance(result.get("properties"), dict) else {}
+            result["required"] = list(properties)
+            result["additionalProperties"] = False
+        return result
+
+    return strictify(schema)
+
+
+def route_openai_model(settings: dict[str, Any], prompt_type: str = "", use_advanced: bool = False) -> tuple[str, str, str]:
+    default_model = str(settings.get("openAiModel") or OPENAI_DEFAULT_MODEL).strip() or OPENAI_DEFAULT_MODEL
+    advanced_model = str(settings.get("openAiAdvancedModel") or OPENAI_ADVANCED_MODEL).strip() or OPENAI_ADVANCED_MODEL
+    advanced = use_advanced or prompt_type in OPENAI_ADVANCED_PROMPT_TYPES
+    return (advanced_model, "terra", "medium") if advanced else (default_model, "luna", "low")
+
+
+def call_openai(
+    prompt: str,
+    model: str,
+    api_key: str,
+    max_output_tokens: int,
+    timeout: float,
+    prompt_type: str = "",
+    reasoning_effort: str = "low",
+) -> tuple[str, int, int]:
+    request_payload: dict[str, Any] = {
+        "model": model,
+        "input": prompt,
+        "store": False,
+        "max_output_tokens": max_output_tokens,
+        "reasoning": {"effort": reasoning_effort},
+    }
+    schema = openai_response_schema(prompt_type)
+    if schema:
+        request_payload["text"] = {
+            "format": {
+                "type": "json_schema",
+                "name": f"creator_{prompt_type.replace('-', '_')}",
+                "description": "Structured result for a Creator Empire workflow",
+                "strict": True,
+                "schema": schema,
+            }
+        }
+    else:
+        request_payload["text"] = {"format": {"type": "json_object"}}
     data = post_json(
         "https://api.openai.com/v1/responses",
         {"Authorization": f"Bearer {api_key}"},
-        {"model": model, "input": prompt, "store": False, "max_output_tokens": max_output_tokens},
+        request_payload,
         timeout,
     )
+    if data.get("status") == "incomplete":
+        details = data.get("incomplete_details") if isinstance(data.get("incomplete_details"), dict) else {}
+        reason = str(details.get("reason") or "unknown")[:80]
+        raise RuntimeError(f"OpenAI response incomplete: {reason}")
     chunks: list[str] = []
     if isinstance(data.get("output_text"), str):
         chunks.append(data["output_text"])
@@ -503,11 +570,20 @@ def call_openai(prompt: str, model: str, api_key: str, max_output_tokens: int, t
         if not isinstance(item, dict):
             continue
         for content in item.get("content", []) if isinstance(item.get("content"), list) else []:
+            if isinstance(content, dict) and content.get("type") == "refusal":
+                raise RuntimeError("OpenAI declined this request")
             if isinstance(content, dict) and isinstance(content.get("text"), str):
                 chunks.append(content["text"])
     usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+    text = "\n".join(dict.fromkeys(filter(None, chunks))).strip()
+    if not text:
+        raise RuntimeError("OpenAI response unavailable: provider returned no text")
+    try:
+        json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("OpenAI produced invalid structured JSON") from exc
     return (
-        "\n".join(dict.fromkeys(filter(None, chunks))).strip() or json.dumps(data, ensure_ascii=False),
+        text,
         int(usage.get("input_tokens", 0) or 0),
         int(usage.get("output_tokens", 0) or 0),
     )
@@ -634,12 +710,19 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("unsupported promptType")
     with AI_RUN_LOCK:
         settings = load_settings()
-        enforce_budget(provider, settings)
-        api_key, key_source = provider_key(provider)
-        default_model = str(settings.get("openAiModel" if provider == "openai" else "geminiModel") or "").strip()
-        model = str(payload.get("model") or default_model).strip()
+        model_tier = "provider-default"
+        reasoning_effort = "provider-default"
+        if provider == "openai":
+            model, model_tier, reasoning_effort = route_openai_model(
+                settings, prompt_type, payload.get("useAdvancedModel") is True
+            )
+        else:
+            default_model = str(settings.get("geminiModel") or "").strip()
+            model = str(payload.get("model") or default_model).strip()
         if not model:
             raise ValueError("model is required")
+        enforce_budget(provider, settings, model)
+        api_key, key_source = provider_key(provider)
         max_tokens = int(numeric_setting(settings, "aiMaxOutputTokens", 2500, 128, 16000))
         requested_tokens = int(payload.get("maxOutputTokens", max_tokens) or max_tokens)
         max_tokens = min(max_tokens, max(128, requested_tokens))
@@ -653,13 +736,15 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
         estimated_cost = 0.0
         try:
             if provider == "openai":
-                text, input_tokens, output_tokens = call_openai(prompt, model, api_key, max_tokens, timeout)
+                text, input_tokens, output_tokens = call_openai(
+                    prompt, model, api_key, max_tokens, timeout, prompt_type, reasoning_effort
+                )
             else:
                 thinking_level = str(settings.get("geminiThinkingLevel") or "low").strip().lower()
                 if thinking_level not in {"minimal", "low", "medium", "high"}:
                     thinking_level = "low"
                 text, input_tokens, output_tokens, search_queries = call_gemini(prompt, model, api_key, max_tokens, timeout, prompt_type, thinking_level)
-            estimated_cost = estimate_cost(provider, input_tokens, output_tokens, settings, search_queries)
+            estimated_cost = estimate_cost(provider, input_tokens, output_tokens, settings, search_queries, model)
             daily, monthly = budget_limits(settings)
             if daily and ai_spend("day") + estimated_cost > daily:
                 raise RuntimeError("This run would exceed the daily AI budget")
@@ -675,6 +760,8 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
                 "ok": True,
                 "provider": provider,
                 "model": model,
+                "modelTier": model_tier,
+                "reasoningEffort": reasoning_effort,
                 "promptType": prompt_type or None,
                 "text": text,
                 "inputTokens": input_tokens,
@@ -722,7 +809,15 @@ def ai_capabilities() -> dict[str, Any]:
     return {
         "ok": True,
         "promptTypes": list(SUPPORTED_PROMPT_TYPES),
-        "structuredOutput": {"gemini": True, "openai": False},
+        "structuredOutput": {"gemini": True, "openai": True},
+        "openAiRouter": {
+            "defaultModel": str(settings.get("openAiModel") or OPENAI_DEFAULT_MODEL),
+            "advancedModel": str(settings.get("openAiAdvancedModel") or OPENAI_ADVANCED_MODEL),
+            "advancedPromptTypes": sorted(OPENAI_ADVANCED_PROMPT_TYPES),
+            "defaultSharePercent": 81.25,
+            "advancedSharePercent": 18.75,
+            "importantScriptOverride": True,
+        },
         "guardrails": {
             "promptCharacterLimit": 100_000,
             "maxOutputTokens": int(numeric_setting(settings, "aiMaxOutputTokens", 2500, 128, 16000)),
@@ -736,7 +831,7 @@ def ai_capabilities() -> dict[str, Any]:
 
 
 class CreatorHandler(BaseHTTPRequestHandler):
-    server_version = "CreatorEmpireSQLite/1.4.1"
+    server_version = "CreatorEmpireSQLite/1.4.2"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
@@ -752,7 +847,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, {
                     "ok": True,
                     "service": "creator-empire",
-                    "version": "1.4.1",
+                    "version": "1.4.2",
                     "release": os.environ.get("CREATOR_EMPIRE_RELEASE_SHA", "dev"),
                 }); return
             if path == "/api/workspace":

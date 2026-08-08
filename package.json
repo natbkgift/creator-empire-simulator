@@ -1,6 +1,6 @@
 {
   "name": "creator-empire-simulator",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "type": "module",
   "description": "Editorial Creator OS with SQLite reliability, capacity-aware production planning, Channel Workspace strategy, and AI Assisted guardrails",

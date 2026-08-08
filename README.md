@@ -1,4 +1,4 @@
-# Creator Empire Simulator v1.4.1
+# Creator Empire Simulator v1.4.2
 
 ระบบวางแผนและผลิตวิดีโอหลายช่องแบบ **Channel Strategy → Today Mission → Calendar Plan → Production → Publish → Growth** โดยใช้ SQLite แบบ revisioned เป็น durable store, IndexedDB เป็น offline mirror และรองรับทั้ง Manual กับ AI Assisted (OpenAI / Gemini)
 
@@ -170,7 +170,10 @@ Desktop ใช้ 7-day production schedule ส่วน mobile ใช้ single
 - เลือก OpenAI หรือ Gemini
 - Prompt Studio เรียก Local Server เมื่อผู้ใช้กด Generate
 - มี output token limit, request timeout, retry/backoff, daily/monthly budget และ AI run cost ledger
-- OpenAI Responses request ใช้ `store=false`
+- OpenAI Responses request ใช้ `store=false` และ Structured Outputs ครบทั้ง 16 workflows
+- OpenAI model router ใช้ `gpt-5.6-luna` เป็นค่าเริ่มต้น 13/16 workflows (81.25%) และ `gpt-5.6-terra` สำหรับ Niche Strategy, Fact Check, Analytics Post-mortem 3/16 (18.75%)
+- Prompt Studio มี per-run Terra override สำหรับสคริปต์สำคัญหรืองานหลายเงื่อนไข; Luna ใช้ reasoning `low` และ Terra ใช้ `medium`
+- Cost ledger แยกราคาตามโมเดลจริง โดยค่าเริ่มต้น Luna $0.20/$1.20 และ Terra $2/$12 ต่อ 1M input/output tokens (แก้ได้ใน Settings)
 - Gemini ใช้ structured response schema ครบทั้ง 16 Prompt Studio workflows
 - Niche/Topic/Fact-check/Competitor research ใช้ Google Search grounding เมื่อ Gemini 3 รองรับ และบันทึกจำนวน search query ลง cost ledger
 - คำตอบ Gemini ที่ถูกตัดกลาง JSON จะ compact-retry ได้หนึ่งครั้ง โดยนับ token และต้นทุนของทั้งสองคำขอ

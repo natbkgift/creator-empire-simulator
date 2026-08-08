@@ -23,6 +23,8 @@ import { renderShell } from '../dist/src/app/shell.js';
 import { renderBlueprint } from '../dist/src/features/blueprint.js';
 import { renderHq } from '../dist/src/features/hq.js';
 import { renderAnalytics } from '../dist/src/features/analytics.js';
+import { renderPrompts } from '../dist/src/features/prompts.js';
+import { renderSettings } from '../dist/src/features/settings.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -145,6 +147,18 @@ test('Channels portfolio and Channel Workspace preserve strategy plus 30-day pro
   assert.ok(detail.includes('30-Day Content Plan'));
   assert.ok(detail.includes('data-action="open-plan-idea"'));
   assert.ok(detail.includes('data-action="add-plan-idea"'));
+});
+
+test('OpenAI router UI exposes Luna default, Terra auto-route, and important-script override', () => {
+  const workspace = createSeedWorkspace();
+  workspace.settings.workflowMode = 'automatic';
+  workspace.settings.aiProvider = 'openai';
+  const settings = renderSettings(workspace);
+  const luna = renderPrompts(workspace, new URLSearchParams({ project: workspace.projects[0].id, type: 'shorts-script' }), '');
+  const terra = renderPrompts(workspace, new URLSearchParams({ project: workspace.projects[0].id, type: 'fact-check' }), '');
+  assert.ok(settings.includes('81.25% Luna / 18.75% Terra') && settings.includes('name="openAiAdvancedModel"'));
+  assert.ok(luna.includes('Use Terra for this run') && luna.includes('Generate with Luna'));
+  assert.ok(terra.includes('Terra · auto-routed') && terra.includes('Generate with Terra'));
 });
 
 let passed = 0;
