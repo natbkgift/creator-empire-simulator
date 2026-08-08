@@ -1,10 +1,11 @@
 import type { Workspace } from '../domain/types.js';
 import { escapeHtml } from '../domain/utils.js';
 import { icon } from '../ui/icons.js';
-import { activeChannel, activeProject, dailyMission, statusLabels } from './selectors.js';
-import { navigation, primaryMobileNavigation, routeTitle } from './navigation.js';
+import { activeChannel, activeProject, statusLabels } from './selectors.js';
+import { navigation, primaryMobileNavigation } from './navigation.js';
 import { routeHref } from './router.js';
 import { getStorageStatus } from '../db/storage.js';
+import '../controllers/editorial-controller.js';
 
 export interface ToastState { title: string; detail: string; reward?: string; }
 
@@ -16,7 +17,6 @@ export const renderShell = (workspace: Workspace, route: string, content: string
   const mobileNav = navigation.filter((item) => primaryMobileNavigation.includes(item.route)).map((item) => `<a class="mobile-nav ${item.route === route ? 'active' : ''}" href="${routeHref(item.route)}" aria-label="${escapeHtml(item.label)}">${icon(item.icon)}<span>${escapeHtml(item.shortLabel)}</span></a>`).join('');
   const channel = activeChannel(workspace);
   const project = activeProject(workspace);
-  const mission = dailyMission(workspace);
   const storage = getStorageStatus();
   const channelProjects = channel ? workspace.projects.filter((item) => item.channelId === channel.id && item.status !== 'archived') : [];
   const storageHealthy = storage.mode === 'sqlite' || storage.mode === 'hybrid';
