@@ -1,9 +1,9 @@
 {
   "name": "creator-empire-simulator",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
-  "description": "Data-safe creator workflow with SQLite revision history, capacity planning, Manual and AI Assisted modes",
+  "description": "Editorial Creator OS with SQLite reliability, capacity-aware production planning, Channel Workspace strategy, and AI Assisted guardrails",
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",
