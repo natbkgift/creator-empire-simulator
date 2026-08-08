@@ -88,6 +88,8 @@ def main() -> None:
         workspace = saved["workspace"]
         workspace["settings"]["onboardingComplete"] = True
         api("/api/workspace", "PUT", {"workspace": workspace})
+        # Reload the document so the in-memory store reconciles the API update before changing only the hash route.
+        page.reload(wait_until="domcontentloaded")
         page.goto(f"{BASE_URL}/#/hq", wait_until="domcontentloaded")
         page.wait_for_selector(".side-rail .nav-dot")
         wait_app(page)
