@@ -1,6 +1,6 @@
-# Creator Empire Simulator v1.3.0
+# Creator Empire Simulator v1.4.0
 
-ระบบวางแผนและผลิตวิดีโอหลายช่องแบบ **Today → Next Mission → Publish** โดยใช้ SQLite แบบ revisioned เป็น durable store, IndexedDB เป็น offline mirror และรองรับทั้ง Manual กับ AI Assisted (OpenAI / Gemini)
+ระบบวางแผนและผลิตวิดีโอหลายช่องแบบ **Channel Strategy → Today Mission → Calendar Plan → Production → Publish → Growth** โดยใช้ SQLite แบบ revisioned เป็น durable store, IndexedDB เป็น offline mirror และรองรับทั้ง Manual กับ AI Assisted (OpenAI / Gemini)
 
 ## เปิดใช้งานบน Windows
 
@@ -13,33 +13,136 @@
 
 Local server bind เฉพาะ `127.0.0.1` โดยค่าเริ่มต้น
 
-## UX/UI v1.3
+## UX/UI v1.4 — Editorial Creator OS
 
-ดีไซน์ใช้ **Professional Light UI** เป็นค่าเริ่มต้น: พื้นหลังสว่าง, hierarchy ชัด, ขนาดตัวอักษรอ่านง่ายขึ้น, ลด visual noise และลด navigation ให้เหลือ 5 พื้นที่หลักเท่านั้น
+v1.4 ใช้ Figma Design Freeze เป็น visual/interaction source of truth แต่ **ยังคง production architecture เดิม**: TypeScript/CSS + Python/SQLite ไม่ได้ย้าย production app ไป React/Vite/Tailwind
 
-- **Today** — Next Mission และงานวันนี้
-- **Channels** — Channel Strategy + สร้างวิดีโอจาก Topic / Format / Publish datetime
-- **Calendar** — Capacity-aware production plan, conflicts และ reschedule
-- **Production** — งานที่ยังต้องปิดก่อน Publish
-- **Insights** — Analytics หลัง Publish
+Visual direction:
 
-Prompt Studio, CapCut Lab และ Policy Shield เป็น contextual tools ที่ Mission เปิดให้ตามขั้นตอน จึงไม่ต้องหาเมนูเอง
+- Editorial Dark
+- Deep navy ground `#080c14`
+- Content `#0f1420`
+- Elevated surface `#161d2e`
+- Electric indigo `#6b5bd7`
+- Warm cream text `#f0ead8`
+- Thai typography: Noto Serif Thai / Noto Sans Thai
+- English typography: DM Serif Display / Instrument Sans
+- Technical metadata: JetBrains Mono
 
-## Production semantics
+Persistent navigation มี **5 พื้นที่เท่านั้น**:
+
+1. **Today** — Execute: Next Mission เป็นสิ่งที่เด่นที่สุด
+2. **Channels** — Strategy: Portfolio → Channel Workspace → Blueprint → 30-Day Content Plan
+3. **Production** — Produce: 7-group Production Flow
+4. **Calendar** — Plan: Capacity-aware schedule + Reschedule
+5. **Insights** — Learn: 2 featured KPIs + dominant chart + Recent Publishes
+
+Prompt Studio, CapCut Lab, Policy Shield, Settings, Monetization และ Backup/Recovery เป็น contextual/global surfaces ไม่ใช่ persistent navigation
+
+## Global Command Header
+
+Desktop header เป็น control plane สำหรับ:
+
+- Channel Focus / Portfolio
+- Active Video
+- Detailed production stage
+- Next publish datetime
+- Global Search / Command Palette
+- AI mode status
+- Settings
+- Storage / recovery status
+
+ใช้ `Ctrl+K` / `Cmd+K` เพื่อเปิด Global Command Palette
+
+Mobile ใช้ compact context header + bottom navigation 5 รายการ
+
+## Channels — Strategy Home
+
+Channels มีสองระดับ:
 
 ```text
-Idea → Research → Fact Check → Hook → Script → Storyboard
-→ Assets → CapCut → Edit → QA → Schedule → Upload
-→ ✅ Published / VIDEO COMPLETE
+Channel Portfolio
+→ Channel Workspace
+```
+
+Channel Workspace เก็บ:
+
+- Positioning / Channel Promise
+- Target Audience
+- Content Pillars
+- Language & Format
+- Publishing Targets
+- Originality & Sources
+- Monetization paths
+- 30-Day Content Plan
+- Current Videos
+
+### 30-Day Content Plan → Real Production
+
+แต่ละ idea สามารถแก้:
+
+- Topic / Title
+- Shorts / Long-form
+- Objective
+- Content Pillar
+- Suggested Hook
+- Publish date & time
+
+จากนั้นกด **Create Video & Plan Calendar** เพื่อสร้าง `VideoProject` จริงใน workspace แล้วใช้ Calendar Planner เดิมสร้าง workflow ตาม capacity
+
+```text
+Idea
+→ Create Video
+→ Selected
+→ Calendar Planner
+→ Production Missions
+```
+
+ไม่ใช่ mock UI-only state
+
+## Production Flow v1.4
+
+UI รวม workflow ที่ละเอียดเป็น 7 visual groups โดยไม่ลบ detailed stage เดิม:
+
+```text
+Idea
+  Idea Backlog → Selected
+
+Research
+  Researching → Sources Verified
+
+Script
+  Hook Ready → Script Draft → Script Approved
+
+Production
+  Storyboard → Assets Needed → CapCut Draft
+
+Edit
+  Editing
+
+Release
+  QA → Scheduled → Published
+
+Growth
+  Analytics Review → Repurpose → Archived
+```
+
+Production Flow เป็น visual grouping เท่านั้น Completion Gates และ detailed workflow contracts เดิมยังคงทำงาน
+
+## Production Complete semantics
+
+```text
+Published + real publication URL
+= ✅ VIDEO COMPLETE · 100%
 ```
 
 หลัง Published ระบบแยกเป็น Growth Loop:
 
 ```text
-Actual Analytics → Post-mortem → Repurpose → Learning Loop Complete
+Actual Analytics → Post-mortem → Repurpose → Learning Complete
 ```
 
-Analytics ไม่ทำให้วิดีโอดูเหมือน “ยังผลิตไม่เสร็จ” อีกต่อไป
+Analytics ไม่ทำให้ Production progress ลดจาก 100%
 
 ## Calendar Planner v2
 
@@ -49,7 +152,9 @@ Analytics ไม่ทำให้วิดีโอดูเหมือน “
 - Shorts / Long-form
 - วันและเวลา Publish
 
-ระบบจะสร้าง Production Plan ตามความจุเวลาที่ตั้งไว้ (`weeklyHoursAvailable`) และใช้ duration template ที่ต่างกันระหว่าง Shorts กับ Long-form หากงานเกินวัน Publish จะขึ้น Capacity conflict และสามารถ Reschedule เพื่อคำนวณแผนใหม่ได้
+ระบบสร้าง Production Plan ตามความจุเวลาที่ตั้งไว้ (`weeklyHoursAvailable`) และใช้ duration template ที่ต่างกันระหว่าง Shorts กับ Long-form หากงานเกินวัน Publish จะขึ้น Capacity Conflict และสามารถ Reschedule เพื่อคำนวณแผนใหม่ได้
+
+Desktop ใช้ 7-day production schedule ส่วน mobile ใช้ single-day view พร้อม previous/next day
 
 ## Manual / AI Assisted
 
@@ -71,7 +176,7 @@ Analytics ไม่ทำให้วิดีโอดูเหมือน “
 
 ## API key security
 
-**v1.3 ไม่เก็บ API key ใน SQLite**
+**v1.4 ไม่เก็บ API key ใน SQLite**
 
 Persistent key ให้ตั้งผ่าน environment:
 
@@ -112,7 +217,7 @@ Data contract:
 - `workspace_history`
 - `ai_runs`
 
-ไม่มี `ai_secrets` table ใน v1.3
+ไม่มี `ai_secrets` table
 
 ## Release Gate
 
@@ -135,7 +240,7 @@ Windows core validation:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-local.ps1
 ```
 
-รวม Browser E2E:
+รวม Browser regression + v1.4 acceptance:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-local.ps1 -Browser
@@ -152,10 +257,13 @@ Local validation ครอบคลุม:
 
 - TypeScript build + domain/UI tests
 - SQLite revision/history/checksum/recovery
+- IndexedDB outage + dual-storage reconciliation
 - secret non-persistence
 - mocked AI token/cost guardrails
 - Windows launcher startup test
-- optional Browser E2E + mobile overflow
+- v1.3 recovery browser regression
+- v1.4 frozen-design browser acceptance
+- 1440 / 390 responsive checks
 - repository hygiene guard ว่า `dist/`, `data/`, SQLite/WAL/SHM และ `.env` ไม่ถูก track
 
 ## Runtime files
