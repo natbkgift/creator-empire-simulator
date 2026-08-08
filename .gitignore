@@ -11,18 +11,32 @@ __pycache__/
 venv/
 env/
 
-# SQLite databases & local data
+# Local runtime data — never commit user data or SQLite journals
+data/
+backups/
 *.db
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
 *.log
+
+# Runtime secrets / environment
+.env
+.env.*
+!.env.example
+*.secret
+*.secrets
+
+# Test/runtime artifacts
+playwright-report/
+test-results/
+coverage/
+.tmp/
+tmp/
 
 # OS / Editor files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-
-# Environment files
-.env
-.env.local

@@ -3,15 +3,31 @@ import { validateWorkspace } from '../domain/validation.js';
 import { loadWorkspaceRecord as loadIndexedDb, saveWorkspaceRecord as saveIndexedDb } from './indexeddb.js';
 
 export interface StorageStatus {
-  mode: 'loading' | 'sqlite' | 'indexeddb';
+  mode: 'loading' | 'sqlite' | 'indexeddb' | 'hybrid';
   ok: boolean;
   detail: string;
   dbPath?: string;
   savedAt?: string;
+  revision?: number;
+  checksum?: string;
+  historyCount?: number;
+}
+
+interface ServerStorageMeta {
+  dbPath?: string;
+  savedAt?: string;
+  revision?: number;
+  checksum?: string;
+  historyCount?: number;
+}
+
+interface WorkspacePayload {
+  workspace: unknown | null;
+  storage?: ServerStorageMeta;
 }
 
 let status: StorageStatus = { mode: 'loading', ok: false, detail: 'Starting storage…' };
-const API_TIMEOUT_MS = 2200;
+const API_TIMEOUT_MS = 3500;
 
 export const getStorageStatus = (): StorageStatus => status;
 
@@ -34,35 +50,137 @@ const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
   }
 };
 
+const validWorkspace = (value: unknown): Workspace | null => {
+  if (!value) return null;
+  const validation = validateWorkspace(value);
+  if (!validation.valid || !validation.workspace) return null;
+  return validation.workspace;
+};
+
+const freshness = (workspace: Workspace | null): [number, number] => {
+  if (!workspace) return [-1, -1];
+  const timestamp = Number.isFinite(Date.parse(workspace.updatedAt)) ? Date.parse(workspace.updatedAt) : 0;
+  return [workspace.revision ?? 0, timestamp];
+};
+
+const newer = (a: Workspace | null, b: Workspace | null): Workspace | null => {
+  const [ar, at] = freshness(a);
+  const [br, bt] = freshness(b);
+  if (ar !== br) return ar > br ? a : b;
+  return at >= bt ? a : b;
+};
+
+const isFresherThan = (candidate: Workspace | null, baseline: Workspace | null): boolean => {
+  const [candidateRevision, candidateUpdatedAt] = freshness(candidate);
+  const [baselineRevision, baselineUpdatedAt] = freshness(baseline);
+  return candidateRevision > baselineRevision || (candidateRevision === baselineRevision && candidateUpdatedAt > baselineUpdatedAt);
+};
+
+const putSqlite = async (workspace: Workspace): Promise<{ workspace: Workspace; storage?: ServerStorageMeta }> => {
+  const payload = await fetchJson<{ ok: true; workspace?: unknown; storage?: ServerStorageMeta }>('/api/workspace', {
+    method: 'PUT',
+    body: JSON.stringify({ workspace }),
+  });
+  return { workspace: validWorkspace(payload.workspace) ?? workspace, storage: payload.storage };
+};
+
 export const loadWorkspaceRecord = async (): Promise<Workspace | null> => {
+  const indexedPromise = loadIndexedDb().catch(() => null);
+  let serverPayload: WorkspacePayload | null = null;
   try {
-    const payload = await fetchJson<{ workspace: unknown | null; storage?: { dbPath?: string; savedAt?: string } }>('/api/workspace');
-    if (payload.workspace) {
-      const validation = validateWorkspace(payload.workspace);
-      if (!validation.valid || !validation.workspace) throw new Error(validation.errors.join(' '));
-      status = { mode: 'sqlite', ok: true, detail: 'SQLite database connected', dbPath: payload.storage?.dbPath, savedAt: payload.storage?.savedAt };
-      return validation.workspace;
-    }
-    status = { mode: 'sqlite', ok: true, detail: 'SQLite database ready; no workspace saved yet.', dbPath: payload.storage?.dbPath, savedAt: payload.storage?.savedAt };
-    return null;
+    serverPayload = await fetchJson<WorkspacePayload>('/api/workspace');
   } catch (error) {
-    console.warn('SQLite API unavailable; falling back to IndexedDB.', error);
-    const fallback = await loadIndexedDb();
-    status = { mode: 'indexeddb', ok: Boolean(fallback), detail: 'SQLite server unavailable; using browser IndexedDB fallback.' };
-    return fallback;
+    console.warn('SQLite API unavailable during load; checking IndexedDB.', error);
+  }
+  const indexed = await indexedPromise;
+  const sqlite = validWorkspace(serverPayload?.workspace ?? null);
+  const winner = newer(sqlite, indexed);
+
+  if (!serverPayload) {
+    status = {
+      mode: 'indexeddb',
+      ok: Boolean(indexed),
+      detail: indexed ? `Offline cache active · revision ${indexed.revision ?? 0}` : 'SQLite unavailable and no IndexedDB workspace exists.',
+      revision: indexed?.revision,
+    };
+    return indexed;
+  }
+
+  if (!winner) {
+    status = {
+      mode: 'hybrid', ok: true, detail: 'SQLite + IndexedDB ready; no workspace saved yet.',
+      ...serverPayload.storage,
+    };
+    return null;
+  }
+
+  // Reconcile in both directions. Revision is authoritative; updatedAt breaks equal-revision ties.
+  // This also protects edits made from an older client that failed to increment revision but have a newer timestamp.
+  if (winner === indexed && indexed && isFresherThan(indexed, sqlite)) {
+    try {
+      const saved = await putSqlite(indexed);
+      await saveIndexedDb(saved.workspace);
+      status = {
+        mode: 'hybrid', ok: true,
+        detail: `Recovered newer IndexedDB revision ${indexed.revision ?? 0} into SQLite`,
+        ...saved.storage,
+      };
+      return saved.workspace;
+    } catch (error) {
+      console.warn('Could not reconcile IndexedDB into SQLite.', error);
+      status = { mode: 'indexeddb', ok: true, detail: 'Using newer IndexedDB revision; SQLite reconciliation is pending.', revision: indexed.revision };
+      return indexed;
+    }
+  }
+
+  if (sqlite) await saveIndexedDb(sqlite);
+  status = {
+    mode: 'hybrid', ok: true,
+    detail: `SQLite source of truth mirrored to IndexedDB · revision ${sqlite?.revision ?? winner.revision ?? 0}`,
+    ...serverPayload.storage,
+  };
+  return sqlite ?? winner;
+};
+
+export const saveWorkspaceRecord = async (workspace: Workspace): Promise<Workspace> => {
+  // IndexedDB is always a local crash/offline mirror, never an either/or storage mode.
+  await saveIndexedDb(workspace);
+  try {
+    const saved = await putSqlite(workspace);
+    await saveIndexedDb(saved.workspace);
+    status = {
+      mode: 'hybrid', ok: true, detail: `Saved transactionally · revision ${saved.workspace.revision ?? 0}`,
+      ...saved.storage,
+    };
+    return saved.workspace;
+  } catch (error) {
+    console.warn('SQLite save failed; IndexedDB mirror retained for later reconciliation.', error);
+    status = {
+      mode: 'indexeddb', ok: true,
+      detail: `SQLite unavailable; revision ${workspace.revision ?? 0} is safe in IndexedDB and will reconcile on reconnect.`,
+      revision: workspace.revision,
+    };
+    return workspace;
   }
 };
 
-export const saveWorkspaceRecord = async (workspace: Workspace): Promise<void> => {
+export const getRecoveryHistory = async (): Promise<Array<{ revision: number; checksum: string; createdAt: string }>> => {
   try {
-    const payload = await fetchJson<{ ok: true; storage?: { dbPath?: string; savedAt?: string } }>('/api/workspace', {
-      method: 'PUT',
-      body: JSON.stringify({ workspace }),
-    });
-    status = { mode: 'sqlite', ok: true, detail: 'Saved to SQLite', dbPath: payload.storage?.dbPath, savedAt: payload.storage?.savedAt };
-  } catch (error) {
-    console.warn('SQLite save failed; using IndexedDB fallback.', error);
-    await saveIndexedDb(workspace);
-    status = { mode: 'indexeddb', ok: true, detail: 'Saved to browser IndexedDB fallback; start the SQLite server for persistent database storage.' };
+    const payload = await fetchJson<{ history?: Array<{ revision: number; checksum: string; createdAt: string }> }>('/api/workspace/history');
+    return Array.isArray(payload.history) ? payload.history : [];
+  } catch {
+    return [];
   }
+};
+
+export const restoreRecoveryRevision = async (revision: number): Promise<Workspace> => {
+  const payload = await fetchJson<{ workspace: unknown; storage?: ServerStorageMeta }>('/api/recovery/restore', {
+    method: 'POST',
+    body: JSON.stringify({ revision }),
+  });
+  const workspace = validWorkspace(payload.workspace);
+  if (!workspace) throw new Error('Recovered workspace failed validation');
+  await saveIndexedDb(workspace);
+  status = { mode: 'hybrid', ok: true, detail: `Restored revision ${revision} as revision ${workspace.revision ?? 0}`, ...payload.storage };
+  return workspace;
 };

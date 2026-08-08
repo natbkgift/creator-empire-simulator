@@ -34,7 +34,7 @@ export const savePrompt = (): void => {
     awardXp(draft, `prompt:${prompt.id}`, 20, type.includes('script') ? 'scriptWriting' : 'storytelling');
   });
   showToast('บันทึก Prompt template แล้ว');
-}
+};
 
 export const parseAndApplyPromptResponse = (): void => {
   const text = document.querySelector<HTMLTextAreaElement>('#prompt-response')?.value ?? '';
@@ -144,31 +144,48 @@ export const parseAndApplyPromptResponse = (): void => {
   promptParseMessage = changed.length ? `JSON valid · applied ${changed.join(', ')}${advancedTo ? ` · advanced to ${advancedTo}` : ''}` : `JSON valid · no recognized fields. Keys: ${Object.keys(parsed).join(', ')}`;
   showToast(advancedTo ? `บันทึกผลลัพธ์และเลื่อนไป ${advancedTo}` : blocker || (changed.length ? 'Parse และ Apply ผลลัพธ์แล้ว' : 'JSON ถูกต้อง แต่ไม่มี Field ที่ระบบนำไปใช้ต่อ'), blocker ? 'warning' : changed.length ? 'success' : 'info');
   if (advancedTo) navigate('mission', { project: project.id, task: nextTaskId }); else requestRender();
-}
+};
 
-export const renderSecretStatus = (payload: unknown): void => {
+const renderRunLedger = (payload: unknown): string => {
+  if (!isRecord(payload)) return '';
+  const daily = typeof payload.dailySpendUsd === 'number' ? payload.dailySpendUsd : 0;
+  const monthly = typeof payload.monthlySpendUsd === 'number' ? payload.monthlySpendUsd : 0;
+  const runs = Array.isArray(payload.runs) ? payload.runs.slice(0, 5) : [];
+  return `<div class="divider"></div><div class="row between wrap"><strong>AI cost ledger</strong><span>$${daily.toFixed(4)} today · $${monthly.toFixed(4)} month</span></div><div class="stack tight">${runs.map((raw) => {
+    const run = isRecord(raw) ? raw : {};
+    const provider = typeof run.provider === 'string' ? run.provider : 'AI';
+    const model = typeof run.model === 'string' ? run.model : '';
+    const input = typeof run.inputTokens === 'number' ? run.inputTokens : 0;
+    const output = typeof run.outputTokens === 'number' ? run.outputTokens : 0;
+    const cost = typeof run.estimatedCostUsd === 'number' ? run.estimatedCostUsd : 0;
+    return `<div class="secret-status-row ${run.ok ? 'configured' : ''}"><b>${escapeHtml(provider.toUpperCase())}</b><span>${escapeHtml(model)} · ${input}/${output} tokens · $${cost.toFixed(4)}</span></div>`;
+  }).join('') || '<span class="muted small-copy">No AI runs yet.</span>'}</div>`;
+};
+
+export const renderSecretStatus = (payload: unknown, runPayload?: unknown): void => {
   const target = document.querySelector<HTMLElement>('#ai-secret-status');
   if (!target || !isRecord(payload)) return;
   const providers = isRecord(payload.providers) ? payload.providers : isRecord(payload.secrets) ? payload.secrets : {};
   const row = (provider: 'openai' | 'gemini'): string => {
     const info = isRecord(providers[provider]) ? providers[provider] : {};
     const configured = Boolean(info.configured);
-    const model = typeof info.model === 'string' && info.model ? info.model : 'not set';
     const masked = typeof info.maskedKey === 'string' && info.maskedKey ? info.maskedKey : '—';
-    return `<div class="secret-status-row ${configured ? 'configured':''}"><b>${provider.toUpperCase()}</b><span>${configured ? 'Configured' : 'Not configured'} · ${escapeHtml(model)} · ${escapeHtml(masked)}</span></div>`;
+    const source = typeof info.source === 'string' ? info.source : 'none';
+    const detail = configured ? `${source === 'environment' ? 'Environment · persistent' : 'Session memory · clears on server exit'} · ${masked}` : 'Not configured';
+    return `<div class="secret-status-row ${configured ? 'configured':''}"><b>${provider.toUpperCase()}</b><span>${escapeHtml(detail)}</span></div>`;
   };
-  target.innerHTML = row('openai') + row('gemini');
+  target.innerHTML = row('openai') + row('gemini') + (runPayload ? renderRunLedger(runPayload) : '');
 };
 
 export const refreshAiStatus = async (): Promise<void> => {
   try {
-    const response = await fetch('/api/secrets');
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    renderSecretStatus(await response.json());
+    const [secretResponse, runResponse] = await Promise.all([fetch('/api/secrets'), fetch('/api/ai/runs')]);
+    if (!secretResponse.ok) throw new Error(`${secretResponse.status} ${secretResponse.statusText}`);
+    renderSecretStatus(await secretResponse.json(), runResponse.ok ? await runResponse.json() : undefined);
   } catch (error) {
     const target = document.querySelector<HTMLElement>('#ai-secret-status');
-    if (target) target.textContent = `SQLite AI server unavailable: ${error instanceof Error ? error.message : 'unknown error'}`;
-    showToast('เชื่อม SQLite AI server ไม่ได้', 'warning');
+    if (target) target.textContent = `Local AI server unavailable: ${error instanceof Error ? error.message : 'unknown error'}`;
+    showToast('เชื่อม Local AI server ไม่ได้', 'warning');
   }
 };
 
@@ -176,17 +193,15 @@ export const saveAiSecret = async (form: HTMLFormElement): Promise<void> => {
   const data = new FormData(form);
   const provider = stringFrom(data, 'provider') === 'gemini' ? 'gemini' : 'openai';
   const apiKey = stringFrom(data, 'apiKey');
-  const model = stringFrom(data, 'model', provider === 'openai' ? getWorkspace().settings.openAiModel : getWorkspace().settings.geminiModel);
-  if (!apiKey) { showToast('ใส่ API key ในหน้านี้ก่อนบันทึก', 'warning'); return; }
+  if (!apiKey) { showToast('ใส่ API key สำหรับ session นี้ก่อน', 'warning'); return; }
   try {
-    const response = await fetch('/api/secrets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, apiKey, model }) });
+    const response = await fetch('/api/secrets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, apiKey }) });
     if (!response.ok) throw new Error(await response.text());
-    const payload = await response.json();
-    renderSecretStatus(payload);
+    renderSecretStatus(await response.json());
     form.reset();
-    showToast(`บันทึก ${provider.toUpperCase()} key ลง SQLite แล้ว`);
+    showToast(`${provider.toUpperCase()} key พร้อมใช้ใน memory จนกว่าจะปิด Local Server`);
   } catch (error) {
-    showToast(`บันทึก API key ไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');
+    showToast(`ตั้งค่า session key ไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');
   }
 };
 
@@ -201,10 +216,11 @@ export const testAiProvider = async (): Promise<void> => {
   const workspace = getWorkspace();
   const model = provider === 'openai' ? workspace.settings.openAiModel : workspace.settings.geminiModel;
   try {
-    const response = await fetch('/api/ai/generate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, model, prompt: 'Return only this JSON: {"ok":true,"message":"connected"}' }) });
-    const payload = await response.json() as { ok?: boolean; text?: string; error?: string };
+    const response = await fetch('/api/ai/generate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, model, maxOutputTokens: 128, prompt: 'Return only this JSON: {"ok":true,"message":"connected"}' }) });
+    const payload = await response.json() as { ok?: boolean; text?: string; error?: string; estimatedCostUsd?: number };
     if (!response.ok || !payload.ok) throw new Error(payload.error ?? JSON.stringify(payload).slice(0,180));
-    showToast(`${provider.toUpperCase()} test สำเร็จ`);
+    showToast(`${provider.toUpperCase()} test สำเร็จ${typeof payload.estimatedCostUsd === 'number' ? ` · ~$${payload.estimatedCostUsd.toFixed(4)}` : ''}`);
+    await refreshAiStatus();
   } catch (error) {
     showToast(`${provider.toUpperCase()} test ไม่ผ่าน: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');
   }
@@ -212,14 +228,14 @@ export const testAiProvider = async (): Promise<void> => {
 
 export const clearAiKey = async (): Promise<void> => {
   const provider = selectedProviderFromSettingsForm();
-  if (!(await confirmDialog('Clear API key', `ลบ ${provider.toUpperCase()} key จาก SQLite?`, 'Clear key'))) return;
+  if (!(await confirmDialog('Clear session key', `ลบ ${provider.toUpperCase()} key ออกจาก memory ของ Local Server? Environment variable จะไม่ถูกแก้ไข`, 'Clear session key'))) return;
   try {
     const response = await fetch(`/api/secrets/${provider}`, { method: 'DELETE' });
     if (!response.ok) throw new Error(await response.text());
     renderSecretStatus(await response.json());
-    showToast(`ลบ ${provider.toUpperCase()} key แล้ว`);
+    showToast(`ล้าง ${provider.toUpperCase()} session key แล้ว`);
   } catch (error) {
-    showToast(`ลบ key ไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');
+    showToast(`ล้าง key ไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');
   }
 };
 
@@ -228,16 +244,19 @@ export const generateCurrentPromptWithAi = async (): Promise<void> => {
   const prompt = document.querySelector<HTMLTextAreaElement>('#prompt-output')?.value ?? '';
   const output = document.querySelector<HTMLTextAreaElement>('#prompt-response');
   if (!prompt || !output) { showToast('ไม่มี Prompt สำหรับ Generate', 'warning'); return; }
-  if (workspace.settings.workflowMode !== 'automatic') { showToast('เปิด Automatic Mode ที่ Settings ก่อน', 'warning'); return; }
+  if (workspace.settings.workflowMode !== 'automatic') { showToast('เปิด AI Assisted ที่ Settings ก่อน', 'warning'); return; }
   const provider = workspace.settings.aiProvider;
   const model = provider === 'openai' ? workspace.settings.openAiModel : workspace.settings.geminiModel;
-  output.value = 'Generating with local SQLite AI server…';
+  output.value = `Generating with ${provider.toUpperCase()}…`;
   try {
-    const response = await fetch('/api/ai/generate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, model, prompt }) });
-    const payload = await response.json() as { ok?: boolean; text?: string; error?: string };
+    const response = await fetch('/api/ai/generate', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider, model, prompt, maxOutputTokens: workspace.settings.aiMaxOutputTokens ?? 2500 }),
+    });
+    const payload = await response.json() as { ok?: boolean; text?: string; error?: string; inputTokens?: number; outputTokens?: number; estimatedCostUsd?: number };
     if (!response.ok || !payload.ok) throw new Error(payload.error ?? JSON.stringify(payload).slice(0,240));
     output.value = payload.text ?? '';
-    showToast(`AI response พร้อม Parse แล้ว · ${provider.toUpperCase()}`);
+    showToast(`AI response พร้อม Parse · ${provider.toUpperCase()} · ${payload.inputTokens ?? 0}/${payload.outputTokens ?? 0} tokens${typeof payload.estimatedCostUsd === 'number' ? ` · ~$${payload.estimatedCostUsd.toFixed(4)}` : ''}`);
   } catch (error) {
     output.value = '';
     showToast(`AI Generate ไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');
