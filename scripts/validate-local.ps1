@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 
-Write-Host '== Creator Empire v1.3 Local Validation ==' -ForegroundColor Cyan
+Write-Host '== Creator Empire v1.4 Local Validation ==' -ForegroundColor Cyan
 Write-Host "Repo: $repo"
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js 20+ is required.' }
@@ -24,10 +24,10 @@ npm ci
 Write-Host '[3/6] TypeScript + domain/UI tests'
 npm test
 
-Write-Host '[4/6] SQLite/data-security tests'
+Write-Host '[4/6] SQLite/data-security regression tests'
 if ($python -eq 'py') { py -3 tests/server-v1.3.py } else { python tests/server-v1.3.py }
 
-Write-Host '[5/6] Windows launcher smoke test'
+Write-Host '[5/6] Windows launcher regression test'
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-startup-v1.3.ps1
 
 Write-Host '[6/6] Repository hygiene guard'
@@ -63,7 +63,10 @@ if ($Browser) {
       } catch { }
     }
     if (-not $ready) { throw 'Local server did not become ready for browser E2E.' }
+    Write-Host '[Browser regression] v1.3 data/recovery contracts'
     if ($python -eq 'py') { py -3 tests/browser-v1.3.py } else { python tests/browser-v1.3.py }
+    Write-Host '[Browser acceptance] v1.4 frozen Editorial Creator OS'
+    if ($python -eq 'py') { py -3 tests/browser-v1.4.py } else { python tests/browser-v1.4.py }
   } finally {
     if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
     Remove-Item Env:CREATOR_EMPIRE_DB -ErrorAction SilentlyContinue
