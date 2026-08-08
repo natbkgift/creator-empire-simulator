@@ -85,7 +85,7 @@ def ensure_column(conn: sqlite3.Connection, table: str, name: str, declaration: 
 
 
 def ensure_db() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     legacy_secret_table = False
     with db_conn() as conn:
         conn.execute("pragma journal_mode=wal")
