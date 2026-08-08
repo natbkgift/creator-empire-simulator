@@ -1,3 +1,37 @@
-/* Small corrective layer for the professional shell after HUD simplification. */
+/* Small corrective layer for the professional shell and legacy component typography. */
 .hud .hud-item:first-of-type { display: flex !important; align-items: center; gap: 7px; }
+
+/* Legacy feature styles used many 7–9px labels. Keep secondary copy compact but readable. */
+.panel p,
+.panel li,
+.panel td,
+.panel th,
+.panel small,
+.calendar-task-card span,
+.calendar-task-card small,
+.video-ticket small,
+.mission-project-row small,
+.mission-queue-task small,
+.path-card p,
+.policy-rule p,
+.data-proof-list span {
+  font-size: max(10px, .72rem) !important;
+  line-height: 1.45 !important;
+}
+.panel strong,
+.video-ticket strong,
+.path-card strong,
+.mission-project-row strong,
+.mission-queue-task strong {
+  line-height: 1.35;
+}
+
+/* Reduce game-like ornamentation while retaining progress as functional feedback. */
+.reward,
+.progress-orbit .fill,
+.mission-progress-orbit .fill { filter: none !important; }
+.brand-orbit,
+.nav-dot.active,
+.btn.primary { text-shadow: none !important; }
+
 @media (max-width: 900px) { .hud .hud-item { display: none !important; } }
