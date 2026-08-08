@@ -4,10 +4,14 @@
 export const Actions = {
   OPEN_COMMAND: 'open-command',
   OPEN_FOCUS_PICKER: 'open-focus-picker',
+  TOGGLE_SIDEBAR: 'toggle-sidebar',
   PORTFOLIO_MODE: 'portfolio-mode',
   FOCUS_PRIMARY_CHANNEL: 'focus-primary-channel',
   FOCUS_CHANNEL: 'focus-channel',
   SET_ACTIVE_PROJECT: 'set-active-project',
+  OPEN_PLAN_IDEA: 'open-plan-idea',
+  ADD_PLAN_IDEA: 'add-plan-idea',
+  REGENERATE_PLAN: 'regenerate-plan',
 
   START_FOCUS_MISSION: 'start-focus-mission',
   START_MISSION: 'start-mission',
