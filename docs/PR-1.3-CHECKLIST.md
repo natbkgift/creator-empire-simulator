@@ -29,6 +29,9 @@
 - [ ] exactly 5 persistent destinations
 - [ ] Today/Next Mission is opening workflow
 - [ ] Prompt/CapCut/Policy contextual routes still work
+- [ ] Professional Light UI is consistent across shell, forms, cards and contextual tools
+- [ ] typography remains readable on desktop and mobile
+- [ ] mobile has no horizontal document overflow
 
 ## AI
 - [ ] `store=false`
@@ -37,8 +40,9 @@
 - [ ] daily/monthly budgets
 - [ ] run cost ledger
 
-## QA
-- [ ] Ubuntu build/domain/server
-- [ ] Browser E2E
-- [ ] dual-store/outage recovery
-- [ ] Windows launcher
+## Local QA — no GitHub Actions
+- [ ] `scripts/validate-local.ps1` core gate passes on exact head
+- [ ] Browser E2E passes with `-Browser` when required for release
+- [ ] dual-store/outage recovery passes
+- [ ] Windows launcher passes
+- [ ] repository hygiene guard passes
