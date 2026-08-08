@@ -5,13 +5,13 @@ export interface NavigationItem {
   icon: string;
 }
 
-// v1.3 keeps only five persistent destinations. Prompt/CapCut/Policy/Simulator/etc.
-// remain valid contextual routes opened by the active project or an explicit action.
+// v1.4 frozen IA: Strategy → execution flow is represented by exactly five
+// persistent destinations. Advanced tools remain contextual routes.
 export const navigation: NavigationItem[] = [
   { route: 'hq', label: 'Today', shortLabel: 'Today', icon: 'home' },
   { route: 'blueprint', label: 'Channels', shortLabel: 'Channels', icon: 'blueprint' },
-  { route: 'calendar', label: 'Calendar', shortLabel: 'Calendar', icon: 'calendar' },
   { route: 'production', label: 'Production', shortLabel: 'Production', icon: 'board' },
+  { route: 'calendar', label: 'Calendar', shortLabel: 'Calendar', icon: 'calendar' },
   { route: 'analytics', label: 'Insights', shortLabel: 'Insights', icon: 'chart' },
 ];
 

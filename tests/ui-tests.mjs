@@ -20,6 +20,7 @@ import {
 } from '../dist/src/ui/components.js';
 import { createSeedWorkspace } from '../dist/src/seed/demo.js';
 import { renderShell } from '../dist/src/app/shell.js';
+import { renderBlueprint } from '../dist/src/features/blueprint.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -45,10 +46,7 @@ test('riskChip maps risk levels to appropriate classes and labels', () => {
 
 test('metricCard and metric render structured values with escaping', () => {
   assert.equal(metricCard(100, 'Total Views'), '<div class="metric-card "><b>100</b><span>Total Views</span></div>');
-  assert.equal(
-    metric('Views', 5000, '+10% past week', 'violet'),
-    '<div class="metric violet"><span>Views</span><strong>5000</strong><small>+10% past week</small></div>',
-  );
+  assert.equal(metric('Views', 5000, '+10% past week', 'violet'), '<div class="metric violet"><span>Views</span><strong>5000</strong><small>+10% past week</small></div>');
 });
 
 test('progress bar handles clamped percentages and custom labels', () => {
@@ -78,17 +76,13 @@ test('button and iconButton format actions and parameters', () => {
   assert.ok(btn.includes('data-action="create-channel"'));
   assert.ok(btn.includes('class="btn primary"'));
   assert.ok(btn.includes('Create'));
-
   const iconBtn = iconButton('Delete item', 'delete-item', 'trash');
   assert.ok(iconBtn.includes('data-action="delete-item"'));
   assert.ok(iconBtn.includes('aria-label="Delete item"'));
 });
 
 test('selectOptions maps option array and marks selected option', () => {
-  const options = [
-    { value: 'en', label: 'English' },
-    { value: 'th', label: 'Thai' },
-  ];
+  const options = [{ value: 'en', label: 'English' }, { value: 'th', label: 'Thai' }];
   const html = selectOptions(options, 'th');
   assert.ok(html.includes('<option value="en" >English</option>'));
   assert.ok(html.includes('<option value="th" selected>Thai</option>'));
@@ -97,10 +91,8 @@ test('selectOptions maps option array and marks selected option', () => {
 test('languageName, numberOrDash, moneyOrDash formatting helpers', () => {
   assert.equal(languageName('en'), 'English');
   assert.equal(languageName('th'), 'ไทย');
-
   assert.equal(numberOrDash(NaN), '—');
   assert.equal(numberOrDash(1234), '1,234');
-
   assert.equal(moneyOrDash(NaN), '—');
   assert.ok(moneyOrDash(500).includes('500'));
 });
@@ -113,14 +105,33 @@ test('emptyState and emptyPanel render container with title and detail', () => {
   assert.equal(emptyState, emptyPanel);
 });
 
-test('renderShell builds full application layout with topbar and nav rail', () => {
+test('renderShell builds frozen Creator OS command header and five navigation areas', () => {
   const workspace = createSeedWorkspace();
   const html = renderShell(workspace, 'hq', '<main id="hq-view">HQ Content</main>');
-
   assert.ok(html.includes('app-shell'));
   assert.ok(html.includes('HQ Content'));
-  assert.ok(html.includes('topbar'));
-  assert.ok(html.includes('Creator Empire'));
+  assert.ok(html.includes('global-command-header'));
+  assert.ok(html.includes('global-search'));
+  assert.ok(html.includes('Search or jump to'));
+  assert.equal((html.match(/class="nav-dot /g) ?? []).length, 5);
+  const order = ['Today', 'Channels', 'Production', 'Calendar', 'Insights'].map((label) => html.indexOf(`nav-label">${label}`));
+  assert.ok(order.every((position) => position >= 0));
+  assert.deepEqual([...order].sort((a,b) => a-b), order);
+});
+
+test('Channels portfolio and Channel Workspace preserve strategy plus 30-day production plan', () => {
+  const workspace = createSeedWorkspace();
+  const portfolio = renderBlueprint(workspace, new URLSearchParams('portfolio=1'));
+  assert.ok(portfolio.includes('channel-portfolio-card'));
+  const channel = workspace.channels[0];
+  assert.ok(channel);
+  const detail = renderBlueprint(workspace, new URLSearchParams(`channel=${encodeURIComponent(channel.id)}`));
+  assert.ok(detail.includes('Channel Blueprint'));
+  assert.ok(detail.includes('Originality & Sources'));
+  assert.ok(detail.includes('Monetization'));
+  assert.ok(detail.includes('30-Day Content Plan'));
+  assert.ok(detail.includes('data-action="open-plan-idea"'));
+  assert.ok(detail.includes('data-action="add-plan-idea"'));
 });
 
 let passed = 0;

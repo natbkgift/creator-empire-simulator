@@ -7,7 +7,7 @@ cd "$ROOT"
 BROWSER=0
 if [[ "${1:-}" == "--browser" ]]; then BROWSER=1; fi
 
-printf '== Creator Empire v1.3 Local Validation ==\n'
+printf '== Creator Empire v1.4 Local Validation ==\n'
 node --version
 npm --version
 python3 --version
@@ -16,7 +16,7 @@ printf '\n[1/5] Install exact dependencies\n'
 npm ci
 printf '\n[2/5] TypeScript + domain/UI tests\n'
 npm test
-printf '\n[3/5] SQLite/data-security tests\n'
+printf '\n[3/5] SQLite/data-security regression tests\n'
 python3 tests/server-v1.3.py
 printf '\n[4/5] Repository hygiene guard\n'
 tracked="$(git ls-files | grep -E '(^dist/|^data/|\.sqlite$|\.sqlite-wal$|\.sqlite-shm$|^\.env$)' || true)"
@@ -42,7 +42,10 @@ if [[ "$BROWSER" == "1" ]]; then
     sleep .25
   done
   curl -fsS http://127.0.0.1:4173/api/storage >/dev/null
+  printf '\n[Browser regression] v1.3 data/recovery contracts\n'
   python3 tests/browser-v1.3.py
+  printf '\n[Browser acceptance] v1.4 frozen Editorial Creator OS\n'
+  python3 tests/browser-v1.4.py
   kill "$pid" 2>/dev/null || true
   trap - EXIT
 fi

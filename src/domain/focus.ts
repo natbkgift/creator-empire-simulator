@@ -1,5 +1,5 @@
 import type { CalendarTask, Channel, VideoProject, Workspace } from './types.js';
-import { workflowStageRank } from './workflow.js';
+import { isProductionComplete, workflowStageRank } from './workflow.js';
 
 const liveProject = (project: VideoProject): boolean => project.status !== 'archived';
 
@@ -7,7 +7,7 @@ export const chooseFocusProject = (workspace: Workspace, channelId?: string): Vi
   const candidates = workspace.projects
     .filter((project) => (!channelId || project.channelId === channelId) && liveProject(project))
     .toSorted((a, b) => {
-      const activeDelta = Number(b.status !== 'published') - Number(a.status !== 'published');
+      const activeDelta = Number(!isProductionComplete(b)) - Number(!isProductionComplete(a));
       if (activeDelta) return activeDelta;
       const deadlineDelta = a.deadline.localeCompare(b.deadline);
       if (deadlineDelta) return deadlineDelta;
