@@ -1,4 +1,4 @@
-# Creator Empire Simulator v1.3.0 — Data-Safe Production Workflow
+# Creator Empire Simulator v1.3.0 — Data-Safe Production Workflow + Professional UI
 
 ## Goals closed
 
@@ -10,12 +10,28 @@
 - Topic + Format + exact Publish datetime + reschedule
 - Published = Video Complete; Growth Loop separate
 - Five-area UX with Today / Next Mission as default workflow
+- Professional Light UI across shell, forms, cards and contextual tools
 - AI Assisted budget/output/retry/timeout hardening
-- Server/browser/Windows QA expansion
+- Local server/browser/Windows QA expansion
+- GitHub Actions removed from the validation architecture
+
+## Professional UI
+
+The final CSS layer normalizes the older mixed dark/light component set into one professional visual system:
+
+- neutral light workspace and white surfaces
+- restrained borders/shadows rather than glow-heavy cards
+- readable secondary typography
+- one primary action color with semantic status colors
+- simplified topbar and desktop HUD
+- consistent form controls and keyboard focus states
+- mobile visual hierarchy aligned with desktop
+
+Game/progression mechanics remain in the product but are visually secondary to production work.
 
 ## Security
 
-Persistent OpenAI/Gemini credentials come from environment variables. UI-entered keys are session-only server memory. Existing `ai_secrets` table is dropped during v1.3 database initialization.
+Persistent OpenAI/Gemini credentials come from environment variables. UI-entered keys are session-only server memory. Existing `ai_secrets` table is securely purged during v1.3 database initialization.
 
 OpenAI Responses requests explicitly set `store=false` and enforce server-side output-token limits.
 
@@ -31,12 +47,20 @@ Video creation requires Topic, Shorts/Long-form and exact Publish datetime. The 
 
 `Published` with a real publication URL is the production finish line and reports 100% production progress. Analytics/Post-mortem/Repurpose continue as a separate Growth Loop.
 
-## QA gates
+## Validation — no GitHub Actions
 
-- TypeScript build + domain/UI tests
-- SQLite revision/history/recovery test
-- secret non-persistence test
-- mocked AI ledger/cost guardrail test
-- browser E2E including dual-storage conflict and outage recovery
-- Windows launcher smoke test
-- Git tracked-artifact guard
+Use the repository-owned local runners:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-local.ps1 -Browser
+```
+
+or:
+
+```bash
+bash scripts/validate-local.sh
+bash scripts/validate-local.sh --browser
+```
+
+The validation suite covers TypeScript/domain/UI, SQLite revision/history/recovery, secret non-persistence, mocked AI ledger/cost guardrails, optional browser dual-storage/outage recovery, Windows launcher startup and tracked-artifact hygiene.
