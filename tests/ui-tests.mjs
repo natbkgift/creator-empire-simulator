@@ -127,7 +127,7 @@ test('Channels portfolio and Channel Workspace preserve strategy plus 30-day pro
   assert.ok(channel);
   const detail = renderBlueprint(workspace, new URLSearchParams(`channel=${encodeURIComponent(channel.id)}`));
   assert.ok(detail.includes('Channel Blueprint'));
-  assert.ok(detail.includes('Originality &amp; Sources'));
+  assert.ok(detail.includes('Originality & Sources'));
   assert.ok(detail.includes('Monetization'));
   assert.ok(detail.includes('30-Day Content Plan'));
   assert.ok(detail.includes('data-action="open-plan-idea"'));
