@@ -27,7 +27,15 @@ export interface Idea {
   descriptionEn: string; descriptionTh: string; score: Record<Language, LanguageScore>; saved: boolean; isDemo?: boolean;
 }
 
-export interface ContentPlanItem { day: number; title: string; format: Exclude<VideoFormat, 'both'>; objective: string; }
+/** v1.4 adds optional editorial metadata without requiring a workspace schema bump. */
+export interface ContentPlanItem {
+  day: number;
+  title: string;
+  format: Exclude<VideoFormat, 'both'>;
+  objective: string;
+  pillar?: string;
+  hook?: string;
+}
 
 export interface ChannelBlueprint {
   concept: string; nameOptions: string[]; promise: string; targetAudience: string; viewerDesire: string; pillars: string[];
