@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import sqlite3
+import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import creator_server as server
 
@@ -39,20 +43,19 @@ def workspace(name: str, revision: int = 0) -> dict:
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="creator-empire-v13-") as temp:
+    with tempfile.TemporaryDirectory(prefix="creator-empire-v13-", ignore_cleanup_errors=True) as temp:
         server.DB_PATH = Path(temp) / "creator_empire.sqlite"
         server.SESSION_KEYS.clear()
 
         # Simulate a v1.2 database that persisted a plaintext provider key.
         legacy_secret = "sk-legacy-plaintext-secret-must-be-purged"
-        with sqlite3.connect(server.DB_PATH) as conn:
+        with server.db_conn() as conn:
             conn.execute("create table ai_secrets(provider text primary key, api_key text not null, model text not null, updated_at text not null)")
             conn.execute("insert into ai_secrets values(?,?,?,?)", ("openai", legacy_secret, "legacy", server.now_iso()))
-            conn.commit()
         assert_true(legacy_secret.encode() in server.DB_PATH.read_bytes(), "legacy fixture did not contain plaintext secret")
 
         server.ensure_db()
-        with sqlite3.connect(server.DB_PATH) as conn:
+        with server.db_conn() as conn:
             tables = {row[0] for row in conn.execute("select name from sqlite_master where type='table'")}
         assert_true("workspace" in tables, "workspace table missing")
         assert_true("workspace_history" in tables, "workspace_history table missing")
@@ -72,12 +75,11 @@ def main() -> None:
         print("PASS transactional revision history increments and preserves backup")
 
         # Corrupt the current row without updating checksum; load must reject it instead of silently using damaged data.
-        with sqlite3.connect(server.DB_PATH) as conn:
+        with server.db_conn() as conn:
             row = conn.execute("select data from workspace where id='default'").fetchone()
             damaged = json.loads(row[0])
             damaged["name"] = "tampered-without-checksum"
             conn.execute("update workspace set data=? where id='default'", (server.canonical_json(damaged),))
-            conn.commit()
         checksum_rejected = False
         try:
             server.load_workspace()
@@ -144,6 +146,9 @@ def main() -> None:
         assert_true(server.load_workspace()["workspace"]["name"] == "restart-safe", "workspace did not survive restart simulation")
         assert_true(not server.secret_status()["providers"]["openai"]["configured"], "session secret survived restart simulation")
         print("PASS restart recovery retains data but not transient secrets")
+
+        import gc
+        gc.collect()
 
     print("\n8/8 server/data-safety checks passed.")
 

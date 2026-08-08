@@ -87,7 +87,10 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
   const target = targetStatus ?? workflowRecommendation(workspace, project).targetStatus;
   const completed: string[] = [];
   const blockers: string[] = [];
-  const check = (condition: boolean, okay: string, blocked: string): void => condition ? completed.push(okay) : blockers.push(blocked);
+  const check = (condition: boolean, okay: string, blocked: string): void => {
+    if (condition) completed.push(okay);
+    else blockers.push(blocked);
+  };
   if (!target) return { ready: true, completed: ['Learning loop is complete.'], blockers: [] };
   switch (target) {
     case 'selected': check(Boolean(project.channelId && project.title && project.deadline), 'Project scope is set.', 'Set channel, title and publication date.'); break;
@@ -146,7 +149,7 @@ const nextCapacitySlot = (workspace: Workspace, project: VideoProject, date: str
   const startMinute = timeToMinutes(workspace.settings.workdayStart || '09:00');
   const endMinute = timeToMinutes(workspace.settings.workdayEnd || '18:00');
   const workdayWindow = Math.max(60, endMinute > startMinute ? endMinute - startMinute : 60);
-  const weeklyDailyShare = Math.max(60, Math.floor(((workspace.settings.weeklyHoursAvailable || 12) * 60) / 5));
+  const weeklyDailyShare = Math.max(10, Math.floor(((workspace.settings.weeklyHoursAvailable || 12) * 60) / 5));
   const dailyCapacity = Math.min(workdayWindow, weeklyDailyShare);
   const publishDate = publishDateFor(project);
   let cursor = date;

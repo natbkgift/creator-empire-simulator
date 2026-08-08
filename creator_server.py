@@ -11,6 +11,7 @@ Security / reliability contract:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import mimetypes
@@ -31,6 +32,20 @@ DATA_DIR = ROOT / "data"
 DB_PATH = Path(os.environ.get("CREATOR_EMPIRE_DB", DATA_DIR / "creator_empire.sqlite"))
 SESSION_KEYS: dict[str, str] = {}
 MAX_HISTORY = 80
+
+
+@contextlib.contextmanager
+def db_conn(timeout: float = 5.0) -> Any:
+    conn = sqlite3.connect(DB_PATH, timeout=timeout)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 
 
 def now_iso() -> str:
@@ -65,7 +80,7 @@ def ensure_column(conn: sqlite3.Connection, table: str, name: str, declaration: 
 def ensure_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     legacy_secret_table = False
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_conn() as conn:
         conn.execute("pragma journal_mode=wal")
         conn.execute("pragma synchronous=full")
         conn.execute("pragma foreign_keys=on")
@@ -124,7 +139,7 @@ def ensure_db() -> None:
     # Repack the database and truncate WAL only when a legacy plaintext-secret table existed.
     # This makes the v1.2 -> v1.3 migration actively remove recoverable free-page copies.
     if legacy_secret_table:
-        with sqlite3.connect(DB_PATH) as conn:
+        with db_conn() as conn:
             conn.execute("pragma secure_delete=on")
             conn.execute("vacuum")
             conn.execute("pragma wal_checkpoint(truncate)")
@@ -176,7 +191,7 @@ def verified_workspace_from_row(row: tuple[Any, ...] | None) -> dict[str, Any] |
 
 
 def db_storage_meta() -> dict[str, Any]:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_conn() as conn:
         row = workspace_row(conn)
         history_count = conn.execute(
             "select count(*) from workspace_history where workspace_id='default'"
@@ -201,7 +216,7 @@ def save_workspace(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("workspace must be an object")
     schema_version = int(workspace.get("schemaVersion", 0) or 0)
     updated_at = now_iso()
-    with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    with db_conn(timeout=10) as conn:
         conn.execute("pragma foreign_keys=on")
         conn.execute("pragma synchronous=full")
         conn.execute("begin immediate")
@@ -235,13 +250,13 @@ def save_workspace(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_workspace() -> dict[str, Any]:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_conn() as conn:
         row = workspace_row(conn)
     return {"workspace": verified_workspace_from_row(row), "storage": db_storage_meta()}
 
 
 def list_history() -> dict[str, Any]:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_conn() as conn:
         rows = conn.execute(
             "select revision,checksum,created_at from workspace_history where workspace_id='default' "
             "order by revision desc limit 30"
@@ -373,7 +388,7 @@ def ai_spend(period: str) -> float:
         cutoff = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
     else:
         cutoff = datetime.now(timezone.utc).strftime("%Y-%m-01T00:00:00Z")
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_conn() as conn:
         row = conn.execute(
             "select coalesce(sum(estimated_cost_usd),0) from ai_runs where ok=1 and created_at>=?", (cutoff,)
         ).fetchone()
@@ -532,17 +547,16 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
         error = str(exc)[:300]
         raise
     finally:
-        with sqlite3.connect(DB_PATH) as conn:
+        with db_conn() as conn:
             conn.execute(
                 "insert into ai_runs(provider,model,created_at,prompt_chars,response_chars,input_tokens,output_tokens,estimated_cost_usd,ok,error) "
                 "values(?,?,?,?,?,?,?,?,?,?)",
                 (provider, model, now_iso(), len(prompt), len(text), input_tokens, output_tokens, estimated_cost, ok, error),
             )
-            conn.commit()
 
 
 def ai_runs() -> dict[str, Any]:
-    with sqlite3.connect(DB_PATH) as conn:
+    with db_conn() as conn:
         rows = conn.execute(
             "select id,provider,model,created_at,input_tokens,output_tokens,estimated_cost_usd,ok,error "
             "from ai_runs order by id desc limit 100"
