@@ -21,6 +21,8 @@ import {
 import { createSeedWorkspace } from '../dist/src/seed/demo.js';
 import { renderShell } from '../dist/src/app/shell.js';
 import { renderBlueprint } from '../dist/src/features/blueprint.js';
+import { renderHq } from '../dist/src/features/hq.js';
+import { renderAnalytics } from '../dist/src/features/analytics.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -112,11 +114,22 @@ test('renderShell builds frozen Creator OS command header and five navigation ar
   assert.ok(html.includes('HQ Content'));
   assert.ok(html.includes('global-command-header'));
   assert.ok(html.includes('global-search'));
+  assert.ok(html.includes('aria-expanded="false"'));
   assert.ok(html.includes('Search or jump to'));
   assert.equal((html.match(/class="nav-dot /g) ?? []).length, 5);
   const order = ['Today', 'Channels', 'Production', 'Calendar', 'Insights'].map((label) => html.indexOf(`nav-label">${label}`));
   assert.ok(order.every((position) => position >= 0));
   assert.deepEqual([...order].sort((a,b) => a-b), order);
+});
+
+test('Today renders mission-first stage rail and Insights hides native CSV input', () => {
+  const workspace = createSeedWorkspace();
+  const hq = renderHq(workspace);
+  assert.ok(hq.indexOf('mission-title') < hq.indexOf('progress-orbit'));
+  assert.equal((hq.match(/mission-stage-step/g) ?? []).length, 5);
+  assert.ok(hq.includes('aria-current="step"'));
+  const insights = renderAnalytics(workspace, new URLSearchParams());
+  assert.ok(insights.includes('class="file-input sr-only"'));
 });
 
 test('Channels portfolio and Channel Workspace preserve strategy plus 30-day production plan', () => {

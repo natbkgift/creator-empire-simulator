@@ -1,6 +1,6 @@
 {
   "name": "creator-empire-simulator",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "type": "module",
   "description": "Editorial Creator OS with SQLite reliability, capacity-aware production planning, Channel Workspace strategy, and AI Assisted guardrails",
@@ -11,6 +11,7 @@
     "test:domain": "node tests/domain-tests.mjs",
     "test:ui": "node tests/ui-tests.mjs",
     "test:server": "python tests/server-v1.3.py",
+    "test:ai-live": "node scripts/ai-live-coverage.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "npm run build && http-server dist -p 4173 -c-1",
     "preview": "http-server dist -p 4173 -c-1",

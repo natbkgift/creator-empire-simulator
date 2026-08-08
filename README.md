@@ -1,4 +1,4 @@
-# Creator Empire Simulator v1.4.0
+# Creator Empire Simulator v1.4.1
 
 ระบบวางแผนและผลิตวิดีโอหลายช่องแบบ **Channel Strategy → Today Mission → Calendar Plan → Production → Publish → Growth** โดยใช้ SQLite แบบ revisioned เป็น durable store, IndexedDB เป็น offline mirror และรองรับทั้ง Manual กับ AI Assisted (OpenAI / Gemini)
 
@@ -171,8 +171,20 @@ Desktop ใช้ 7-day production schedule ส่วน mobile ใช้ single
 - Prompt Studio เรียก Local Server เมื่อผู้ใช้กด Generate
 - มี output token limit, request timeout, retry/backoff, daily/monthly budget และ AI run cost ledger
 - OpenAI Responses request ใช้ `store=false`
+- Gemini ใช้ structured response schema ครบทั้ง 16 Prompt Studio workflows
+- Niche/Topic/Fact-check/Competitor research ใช้ Google Search grounding เมื่อ Gemini 3 รองรับ และบันทึกจำนวน search query ลง cost ledger
+- คำตอบ Gemini ที่ถูกตัดกลาง JSON จะ compact-retry ได้หนึ่งครั้ง โดยนับ token และต้นทุนของทั้งสองคำขอ
+- ค่าเริ่มต้นใช้ `gemini-3.5-flash`; สามารถเลือก Gemini รุ่นอื่นที่บัญชี Google AI เปิดใช้งานได้ใน Settings
 
 > AI Assisted ยังไม่ใช่ unattended/full-auto publishing ผู้ใช้ยังเป็นผู้อนุมัติขั้นตอนสำคัญ
+
+ทดสอบ Google AI แบบ isolated database โดยไม่พิมพ์ key หรือ response body:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run-ai-live-coverage.ps1
+```
+
+การทดสอบครอบคลุม contract, persistence destination, token/search/cost ledger และ quality signals ของทั้ง 16 workflow แหล่งข้อมูลจาก provider ที่ไม่มี Search grounding จะถูกเก็บเป็นคำแนะนำให้ตรวจและไม่ผ่าน Evidence Gate อัตโนมัติ ผู้ใช้ยังต้องเปิดตรวจแหล่งอ้างอิงที่ grounded ก่อนอนุมัติ
 
 ## API key security
 
@@ -190,6 +202,8 @@ GEMINI_API_KEY
 Browser เห็นเพียง configured status + masked preview เท่านั้น
 
 ดูตัวอย่างที่ `.env.example`
+
+Production ควรเก็บ key ใน root-only environment file, bind Python server ที่ loopback, วาง TLS/reverse proxy และ authentication ไว้หน้าแอป พร้อมตั้ง `CREATOR_EMPIRE_MAX_DAILY_USD` และ `CREATOR_EMPIRE_MAX_MONTHLY_USD` เป็น hard ceiling ที่หน้า Settings เพิ่มเกินไม่ได้
 
 ## Data Reliability v2
 

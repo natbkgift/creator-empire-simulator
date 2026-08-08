@@ -38,6 +38,7 @@ def workspace(name: str, revision: int = 0) -> dict:
             "openAiOutputUsdPer1M": 2,
             "geminiInputUsdPer1M": 1,
             "geminiOutputUsdPer1M": 2,
+            "geminiSearchUsdPerQuery": 0.014,
         },
     }
 
@@ -121,9 +122,23 @@ def main() -> None:
         assert_true('"store": False' in source, "OpenAI Responses call must set store=false")
         assert_true('"max_output_tokens": max_output_tokens' in source, "OpenAI output bound missing")
         post_source = inspect.getsource(server.post_json)
-        assert_true("attempts: int = 3" in post_source and "time.sleep" in post_source, "retry/backoff contract missing")
+        assert_true("attempts: int = 4" in post_source and "Retry-After" in post_source and "time.sleep" in post_source, "retry/backoff contract missing")
         assert_true("provider response bodies" in post_source.lower(), "provider error-body redaction contract missing")
         print("PASS OpenAI store=false, output bound, timeout/retry and error-redaction guardrails are present")
+
+        gemini_source = inspect.getsource(server.call_gemini)
+        assert_true('generation_config["responseSchema"] = schema' in gemini_source, "Gemini structured JSON schema mode missing")
+        assert_true('request_payload["tools"] = [{"google_search": {}}]' in gemini_source, "Gemini research grounding tool missing")
+        assert_true(len(server.SUPPORTED_PROMPT_TYPES) == 16, "AI workflow capability inventory must cover 16 prompt types")
+        rejected_prompt_type = False
+        try:
+            server.ai_generate({"provider": "openai", "model": "mock-openai", "prompt": "test", "promptType": "unknown"})
+        except ValueError as exc:
+            rejected_prompt_type = "unsupported prompttype" in str(exc).lower()
+        assert_true(rejected_prompt_type, "unknown AI prompt type was not rejected")
+        grounded_cost = server.estimate_cost("gemini", 100, 50, workspace("grounded")["settings"], 2)
+        assert_true(abs(grounded_cost - 0.0282) < 1e-9, "grounded search cost must be included in the AI budget ledger")
+        print("PASS Gemini structured JSON, Search grounding cost and 16-workflow capability contract are enforced")
 
         # Cost caps are not silently disabled when volatile provider rates have not been configured.
         no_rates = workspace("no-rates", 5)
@@ -138,6 +153,18 @@ def main() -> None:
         assert_true(blocked, "cost-capped AI mode ran without configured price rates")
         print("PASS AI cost cap requires explicit current provider rates")
 
+        previous_daily = os.environ.get("CREATOR_EMPIRE_MAX_DAILY_USD")
+        os.environ["CREATOR_EMPIRE_MAX_DAILY_USD"] = "0.25"
+        try:
+            hard_daily, _ = server.budget_limits({"aiDailyBudgetUsd": 999, "aiMonthlyBudgetUsd": 1000})
+        finally:
+            if previous_daily is None:
+                os.environ.pop("CREATOR_EMPIRE_MAX_DAILY_USD", None)
+            else:
+                os.environ["CREATOR_EMPIRE_MAX_DAILY_USD"] = previous_daily
+        assert_true(hard_daily == 0.25, "environment hard budget ceiling did not override mutable workspace setting")
+        print("PASS environment hard budget ceiling cannot be raised from the browser workspace")
+
         # Simulate restart: session keys vanish, durable workspace/history remain.
         server.save_workspace({"workspace": workspace("restart-safe", 6)})
         server.SESSION_KEYS["openai"] = "transient"
@@ -150,7 +177,7 @@ def main() -> None:
         import gc
         gc.collect()
 
-    print("\n8/8 server/data-safety checks passed.")
+    print("\n10/10 server/data-safety checks passed.")
 
 
 if __name__ == "__main__":

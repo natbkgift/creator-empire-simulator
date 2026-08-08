@@ -139,9 +139,9 @@ export interface SkillProgress {
 export interface Settings {
   locale: 'th' | 'en'; timezone: string; weeklyHoursAvailable: number; capcutBalance: number; soundEnabled: boolean;
   reducedMotion: boolean; onboardingComplete: boolean; workflowMode: AutomationMode; aiProvider: AiProvider; openAiModel: string;
-  geminiModel: string; connectedAiEnabled: boolean; connectedAiProxyUrl: string; sqliteStorageEnabled: boolean; activeChannelLimit: number;
+  geminiModel: string; geminiThinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'; connectedAiEnabled: boolean; connectedAiProxyUrl: string; sqliteStorageEnabled: boolean; activeChannelLimit: number;
   aiMaxOutputTokens?: number; aiRequestTimeoutSeconds?: number; aiDailyBudgetUsd?: number; aiMonthlyBudgetUsd?: number;
-  openAiInputUsdPer1M?: number; openAiOutputUsdPer1M?: number; geminiInputUsdPer1M?: number; geminiOutputUsdPer1M?: number;
+  openAiInputUsdPer1M?: number; openAiOutputUsdPer1M?: number; geminiInputUsdPer1M?: number; geminiOutputUsdPer1M?: number; geminiSearchUsdPerQuery?: number;
   workdayStart?: string; workdayEnd?: string; defaultPublishTime?: string;
 }
 

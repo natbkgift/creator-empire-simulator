@@ -1,6 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$port = 4173
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+$listener.Start()
+$port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+$listener.Stop()
 $runtimeRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } elseif ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
 $temp = Join-Path $runtimeRoot 'creator-empire-win-test'
 New-Item -ItemType Directory -Force -Path $temp | Out-Null
@@ -10,6 +13,7 @@ Remove-Item "$db-wal" -Force -ErrorAction SilentlyContinue
 Remove-Item "$db-shm" -Force -ErrorAction SilentlyContinue
 $env:CREATOR_EMPIRE_DB = $db
 $env:CREATOR_EMPIRE_NO_BROWSER = '1'
+$env:CREATOR_EMPIRE_PORT = [string]$port
 
 $process = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'START-HERE-WINDOWS.bat' -WorkingDirectory $repo -PassThru -WindowStyle Hidden
 try {
@@ -34,4 +38,5 @@ try {
   }
   Remove-Item Env:CREATOR_EMPIRE_DB -ErrorAction SilentlyContinue
   Remove-Item Env:CREATOR_EMPIRE_NO_BROWSER -ErrorAction SilentlyContinue
+  Remove-Item Env:CREATOR_EMPIRE_PORT -ErrorAction SilentlyContinue
 }

@@ -38,18 +38,18 @@ export const savePrompt = (): void => {
 
 export const parseAndApplyPromptResponse = (): void => {
   const text = document.querySelector<HTMLTextAreaElement>('#prompt-response')?.value ?? '';
-  const validation = validatePromptResponse(text);
-  if (!validation.valid || !validation.parsed) {
-    promptParseMessage = validation.error ?? 'Invalid JSON'; requestRender(); showToast('JSON response ไม่ผ่านการตรวจ', 'warning'); return;
-  }
-  const parsed = validation.parsed;
   const workspace = getWorkspace();
   const route = parseRoute();
   const projectId = route.params.get('project') ?? activeProject(workspace)?.id;
   const project = workspace.projects.find((item) => item.id === projectId);
-  if (!project) { promptParseMessage = 'JSON valid แต่ไม่มี Active Project สำหรับ Apply'; requestRender(); return; }
   const requestedType = route.params.get('type');
-  const type = (promptTypes.some((item) => item.id === requestedType) ? requestedType : workflowRecommendation(workspace, project).promptType ?? 'shorts-script') as PromptType;
+  const type = (promptTypes.some((item) => item.id === requestedType) ? requestedType : workflowRecommendation(workspace, project ?? workspace.projects[0]).promptType ?? 'shorts-script') as PromptType;
+  const validation = validatePromptResponse(text, type);
+  if (!validation.valid || !validation.parsed) {
+    promptParseMessage = validation.error ?? 'Invalid JSON'; requestRender(); showToast('JSON response ไม่ผ่านการตรวจ', 'warning'); return;
+  }
+  const parsed = validation.parsed;
+  if (!project) { promptParseMessage = 'JSON valid แต่ไม่มี Active Project สำหรับ Apply'; requestRender(); return; }
   const changed: string[] = [];
   let advancedTo: ProjectStatus | undefined;
   let nextTaskId: string | undefined;
@@ -59,8 +59,20 @@ export const parseAndApplyPromptResponse = (): void => {
     if (!target) return;
     const firstString = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
     const stringList = (value: unknown): string[] => Array.isArray(value) ? value.map((item) => typeof item === 'string' ? item.trim() : isRecord(item) ? firstString(item.text) || firstString(item.prompt) || JSON.stringify(item) : '').filter(Boolean) : [];
+    const readableList = (value: unknown): string[] => Array.isArray(value) ? value.map((item) => typeof item === 'string' ? item.trim() : isRecord(item) ? Object.entries(item).map(([key, entry]) => `${key}: ${typeof entry === 'string' ? entry : JSON.stringify(entry)}`).join(' · ') : '').filter(Boolean) : [];
+    const appendSection = (base: string, label: string, values: string[]): string => values.length ? `${base}${base ? '\n\n' : ''}${label}:\n${values.map((item) => `- ${item}`).join('\n')}` : base;
+    const providerGenerated = firstString(parsed._providerGenerated);
+    const groundedSearchQueries = typeof parsed._groundedSearchQueries === 'number' ? Math.max(0, parsed._groundedSearchQueries) : 0;
     const attachSources = (value: unknown): void => {
       if (!Array.isArray(value)) return;
+      if (providerGenerated && groundedSearchQueries === 0) {
+        const suggestions = readableList(value);
+        if (type === 'fact-check') target.factCheckSummary = appendSection(target.factCheckSummary, 'AI source suggestions — verify manually', suggestions);
+        else target.researchSummary = appendSection(target.researchSummary, 'AI source suggestions — verify manually', suggestions);
+        if (suggestions.length) changed.push('unverified source suggestions');
+        return;
+      }
+      let attached = 0;
       value.forEach((item) => {
         if (!isRecord(item)) return;
         const title = firstString(item.title) || firstString(item.publisher) || 'Untitled source';
@@ -69,22 +81,36 @@ export const parseAndApplyPromptResponse = (): void => {
         const source: SourceRecord = existing ?? {
           id: uid('source'), projectId: target.id, title, url, publisher: firstString(item.publisher), accessedAt: new Date().toISOString(),
           claimType: ['documented', 'reported', 'disputed', 'context'].includes(firstString(item.claimType)) ? firstString(item.claimType) as SourceRecord['claimType'] : 'context',
-          notes: firstString(item.notes) || firstString(item.evidence),
+          notes: `${groundedSearchQueries ? '[Google Search grounded] ' : ''}${firstString(item.notes) || firstString(item.evidence)}`.trim(),
         };
         if (!existing) draft.sources.push(source);
-        if (!target.sourceIds.includes(source.id)) target.sourceIds.push(source.id);
+        if (!target.sourceIds.includes(source.id)) { target.sourceIds.push(source.id); attached += 1; }
       });
-      if (target.sourceIds.length) changed.push('sources');
+      if (attached) changed.push(`${attached} grounded source${attached === 1 ? '' : 's'}`);
     };
 
     if (typeof parsed.title === 'string' && parsed.title.trim()) { target.title = parsed.title.trim(); changed.push('title'); }
+    if (type === 'niche-research' || type === 'competitor-pattern') {
+      let summary = firstString(parsed.summary) || target.researchSummary;
+      summary = appendSection(summary, 'Topic clusters', readableList(parsed.topicClusters));
+      summary = appendSection(summary, 'Validation sprint', readableList(parsed.validationSprint));
+      summary = appendSection(summary, 'Patterns', readableList(parsed.patterns));
+      summary = appendSection(summary, 'Transformed principles', readableList(parsed.transformedPrinciples));
+      summary = appendSection(summary, 'Risks', readableList(parsed.risks));
+      target.researchSummary = summary;
+      changed.push(type === 'niche-research' ? 'niche research' : 'competitor patterns');
+    }
     if (type === 'topic-research') {
       target.researchSummary = firstString(parsed.summary) || firstString(parsed.researchSummary) || target.researchSummary;
+      target.researchSummary = appendSection(target.researchSummary, 'Verified facts', readableList(parsed.verifiedFacts));
+      target.researchSummary = appendSection(target.researchSummary, 'Disputed claims', readableList(parsed.disputedClaims));
       if (target.researchSummary) changed.push('research');
       attachSources(parsed.sources);
     }
     if (type === 'fact-check') {
       target.factCheckSummary = firstString(parsed.safeSummary) || firstString(parsed.factCheckSummary) || firstString(parsed.summary) || target.factCheckSummary;
+      target.factCheckSummary = appendSection(target.factCheckSummary, 'Claims', readableList(parsed.claims));
+      target.factCheckSummary = appendSection(target.factCheckSummary, 'Blocking issues', readableList(parsed.blockingIssues));
       if (target.factCheckSummary) changed.push('fact-check');
       attachSources(parsed.sources);
     }
@@ -95,26 +121,33 @@ export const parseAndApplyPromptResponse = (): void => {
       if (hooks[recommendedIndex]) { target.hook = hooks[recommendedIndex]; changed.push('hook'); }
     }
     if (typeof parsed.script === 'string' && parsed.script.trim()) { target.script = parsed.script.trim(); target.scriptVersion += 1; changed.push('script'); }
+    if ((type === 'shorts-script' || type === 'long-script') && Array.isArray(parsed.factCaveats)) {
+      target.factCheckSummary = appendSection(target.factCheckSummary, 'Script fact caveats', readableList(parsed.factCaveats));
+      changed.push('fact caveats');
+    }
     const storyboard = Array.isArray(parsed.storyboard) ? parsed.storyboard : Array.isArray(parsed.scenes) ? parsed.scenes : undefined;
     if (storyboard) { target.storyboard = storyboard.map((item) => typeof item === 'string' ? item : JSON.stringify(item)); changed.push('storyboard'); }
-    const assets = stringList(parsed.assetPrompts);
-    if (assets.length) { target.assetPrompts = assets; changed.push('asset prompts'); }
+    const assets = readableList(parsed.assetPrompts);
+    const continuity = readableList(parsed.continuityRules).map((item) => `[Continuity] ${item}`);
+    if (assets.length || continuity.length) { target.assetPrompts = [...assets, ...continuity]; changed.push('asset prompts'); }
     if (typeof parsed.capcutBrief === 'string' && parsed.capcutBrief.trim()) { target.capcutBrief = parsed.capcutBrief.trim(); changed.push('CapCut brief'); }
-    const titles = stringList(parsed.thumbnailTitles).concat(stringList(parsed.titles));
+    const titles = [firstString(parsed.recommendedTitle), ...stringList(parsed.thumbnailTitles), ...stringList(parsed.titles)].filter(Boolean);
     const thumbnailConcepts = stringList(parsed.thumbnailConcepts);
     if (titles.length || thumbnailConcepts.length) { target.thumbnailVersions.push(...titles, ...thumbnailConcepts); changed.push('titles/thumbnails'); }
     if (type === 'analytics-postmortem') {
-      const diagnosis = stringList(parsed.diagnosis);
+      const diagnosis = readableList(parsed.diagnosis);
       target.analyticsPostmortem = firstString(parsed.analyticsPostmortem) || diagnosis.join('\n') || firstString(parsed.summary) || target.analyticsPostmortem;
+      target.analyticsPostmortem = appendSection(target.analyticsPostmortem, 'Next actions', readableList(parsed.nextActions));
+      target.analyticsPostmortem = appendSection(target.analyticsPostmortem, 'Next video ideas', readableList(parsed.nextVideoIdeas));
       if (target.analyticsPostmortem) { target.lessonsLearned = target.analyticsPostmortem; changed.push('post-mortem'); }
     }
     if (type === 'repurposing') {
-      const plans = Array.isArray(parsed.platformPlans) ? parsed.platformPlans.map((item) => typeof item === 'string' ? item : JSON.stringify(item)) : [];
+      const plans = readableList(parsed.platformPlans);
       target.repurposingPlan = firstString(parsed.repurposingPlan) || plans.join('\n') || target.repurposingPlan;
       if (target.repurposingPlan) changed.push('repurposing plan');
     }
     if (type === 'next-video' && Array.isArray(parsed.nextVideoIdeas)) {
-      target.lessonsLearned = `${target.lessonsLearned}${target.lessonsLearned ? '\n\n' : ''}Next-video recommendations:\n${parsed.nextVideoIdeas.map((item) => typeof item === 'string' ? item : JSON.stringify(item)).join('\n')}`;
+      target.lessonsLearned = `${target.lessonsLearned}${target.lessonsLearned ? '\n\n' : ''}Next-video recommendations:\n${readableList(parsed.nextVideoIdeas).join('\n')}`;
       changed.push('next-video recommendations');
     }
     target.updatedAt = new Date().toISOString();
@@ -157,8 +190,9 @@ const renderRunLedger = (payload: unknown): string => {
     const model = typeof run.model === 'string' ? run.model : '';
     const input = typeof run.inputTokens === 'number' ? run.inputTokens : 0;
     const output = typeof run.outputTokens === 'number' ? run.outputTokens : 0;
+    const searches = typeof run.searchQueries === 'number' ? run.searchQueries : 0;
     const cost = typeof run.estimatedCostUsd === 'number' ? run.estimatedCostUsd : 0;
-    return `<div class="secret-status-row ${run.ok ? 'configured' : ''}"><b>${escapeHtml(provider.toUpperCase())}</b><span>${escapeHtml(model)} · ${input}/${output} tokens · $${cost.toFixed(4)}</span></div>`;
+    return `<div class="secret-status-row ${run.ok ? 'configured' : ''}"><b>${escapeHtml(provider.toUpperCase())}</b><span>${escapeHtml(model)} · ${input}/${output} tokens${searches ? ` · ${searches} searches` : ''} · $${cost.toFixed(4)}</span></div>`;
   }).join('') || '<span class="muted small-copy">No AI runs yet.</span>'}</div>`;
 };
 
@@ -247,16 +281,18 @@ export const generateCurrentPromptWithAi = async (): Promise<void> => {
   if (workspace.settings.workflowMode !== 'automatic') { showToast('เปิด AI Assisted ที่ Settings ก่อน', 'warning'); return; }
   const provider = workspace.settings.aiProvider;
   const model = provider === 'openai' ? workspace.settings.openAiModel : workspace.settings.geminiModel;
+  const routeType = parseRoute().params.get('type');
+  const promptType = (promptTypes.some((item) => item.id === routeType) ? routeType : undefined) as PromptType | undefined;
   output.value = `Generating with ${provider.toUpperCase()}…`;
   try {
     const response = await fetch('/api/ai/generate', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ provider, model, prompt, maxOutputTokens: workspace.settings.aiMaxOutputTokens ?? 2500 }),
+      body: JSON.stringify({ provider, model, prompt, promptType, maxOutputTokens: workspace.settings.aiMaxOutputTokens ?? 2500 }),
     });
-    const payload = await response.json() as { ok?: boolean; text?: string; error?: string; inputTokens?: number; outputTokens?: number; estimatedCostUsd?: number };
+    const payload = await response.json() as { ok?: boolean; text?: string; error?: string; inputTokens?: number; outputTokens?: number; searchQueries?: number; estimatedCostUsd?: number };
     if (!response.ok || !payload.ok) throw new Error(payload.error ?? JSON.stringify(payload).slice(0,240));
     output.value = payload.text ?? '';
-    showToast(`AI response พร้อม Parse · ${provider.toUpperCase()} · ${payload.inputTokens ?? 0}/${payload.outputTokens ?? 0} tokens${typeof payload.estimatedCostUsd === 'number' ? ` · ~$${payload.estimatedCostUsd.toFixed(4)}` : ''}`);
+    showToast(`AI response พร้อม Parse · ${provider.toUpperCase()} · ${payload.inputTokens ?? 0}/${payload.outputTokens ?? 0} tokens${payload.searchQueries ? ` · ${payload.searchQueries} searches` : ''}${typeof payload.estimatedCostUsd === 'number' ? ` · ~$${payload.estimatedCostUsd.toFixed(4)}` : ''}`);
   } catch (error) {
     output.value = '';
     showToast(`AI Generate ไม่สำเร็จ: ${error instanceof Error ? error.message : 'unknown error'}`, 'danger');

@@ -18,6 +18,7 @@ import mimetypes
 import os
 import sqlite3
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -32,6 +33,12 @@ DATA_DIR = ROOT / "data"
 DB_PATH = Path(os.environ.get("CREATOR_EMPIRE_DB", DATA_DIR / "creator_empire.sqlite"))
 SESSION_KEYS: dict[str, str] = {}
 MAX_HISTORY = 80
+AI_RUN_LOCK = threading.Lock()
+SUPPORTED_PROMPT_TYPES = (
+    "niche-research", "topic-research", "fact-check", "competitor-pattern", "hook-generator",
+    "shorts-script", "long-script", "storyboard", "capcut-standard", "capcut-director",
+    "ai-image", "ai-video", "thumbnail-title", "repurposing", "analytics-postmortem", "next-video",
+)
 
 
 @contextlib.contextmanager
@@ -118,6 +125,7 @@ def ensure_db() -> None:
           response_chars integer not null,
           input_tokens integer not null default 0,
           output_tokens integer not null default 0,
+          search_queries integer not null default 0,
           estimated_cost_usd real not null default 0,
           ok integer not null,
           error text
@@ -126,6 +134,7 @@ def ensure_db() -> None:
         for name, decl in (
             ("input_tokens", "integer not null default 0"),
             ("output_tokens", "integer not null default 0"),
+            ("search_queries", "integer not null default 0"),
             ("estimated_cost_usd", "real not null default 0"),
         ):
             ensure_column(conn, "ai_runs", name, decl)
@@ -152,6 +161,8 @@ def json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[st
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("X-Content-Type-Options", "nosniff")
+    handler.send_header("Referrer-Policy", "same-origin")
+    handler.send_header("X-Frame-Options", "DENY")
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -168,6 +179,17 @@ def read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("JSON body must be an object")
     return payload
+
+
+def validate_request_origin(handler: BaseHTTPRequestHandler) -> None:
+    origin = handler.headers.get("Origin", "").strip()
+    if not origin:
+        return
+    forwarded_proto = handler.headers.get("X-Forwarded-Proto", "").split(",", 1)[0].strip()
+    scheme = forwarded_proto or ("https" if handler.server.server_port == 443 else "http")
+    host = handler.headers.get("Host", "").strip()
+    if not host or origin.rstrip("/") != f"{scheme}://{host}".rstrip("/"):
+        raise PermissionError("Cross-origin state changes are not allowed")
 
 
 def workspace_row(conn: sqlite3.Connection) -> tuple[Any, ...] | None:
@@ -403,14 +425,27 @@ def provider_rates(provider: str, settings: dict[str, Any]) -> tuple[float, floa
     )
 
 
-def estimate_cost(provider: str, input_tokens: int, output_tokens: int, settings: dict[str, Any]) -> float:
+def estimate_cost(provider: str, input_tokens: int, output_tokens: int, settings: dict[str, Any], search_queries: int = 0) -> float:
     input_rate, output_rate = provider_rates(provider, settings)
-    return (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
+    token_cost = (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
+    search_cost = search_queries * numeric_setting(settings, "geminiSearchUsdPerQuery", 0.014, 0, 10) if provider == "gemini" else 0
+    return token_cost + search_cost
+
+
+def budget_limits(settings: dict[str, Any]) -> tuple[float, float]:
+    daily = numeric_setting(settings, "aiDailyBudgetUsd", 2.0, 0, 10_000)
+    monthly = numeric_setting(settings, "aiMonthlyBudgetUsd", 20.0, 0, 100_000)
+    hard_daily = numeric_setting({"value": os.environ.get("CREATOR_EMPIRE_MAX_DAILY_USD")}, "value", 0, 0, 10_000)
+    hard_monthly = numeric_setting({"value": os.environ.get("CREATOR_EMPIRE_MAX_MONTHLY_USD")}, "value", 0, 0, 100_000)
+    if hard_daily:
+        daily = min(daily, hard_daily) if daily else hard_daily
+    if hard_monthly:
+        monthly = min(monthly, hard_monthly) if monthly else hard_monthly
+    return daily, monthly
 
 
 def enforce_budget(provider: str, settings: dict[str, Any]) -> None:
-    daily = numeric_setting(settings, "aiDailyBudgetUsd", 2.0, 0, 10_000)
-    monthly = numeric_setting(settings, "aiMonthlyBudgetUsd", 20.0, 0, 100_000)
+    daily, monthly = budget_limits(settings)
     input_rate, output_rate = provider_rates(provider, settings)
     if (daily or monthly) and input_rate <= 0 and output_rate <= 0:
         raise RuntimeError(f"Configure current {provider} input/output USD per 1M token rates before enabling cost-capped AI Assisted mode")
@@ -420,7 +455,7 @@ def enforce_budget(provider: str, settings: dict[str, Any]) -> None:
         raise RuntimeError(f"Monthly AI budget reached (${monthly:.2f})")
 
 
-def post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float, attempts: int = 3) -> dict[str, Any]:
+def post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float, attempts: int = 4) -> dict[str, Any]:
     last_error: Exception | None = None
     for attempt in range(attempts):
         request = urllib.request.Request(
@@ -438,11 +473,19 @@ def post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeou
             last_error = RuntimeError(f"Provider HTTP {exc.code}: request rejected")
             if exc.code not in {408, 409, 429, 500, 502, 503, 504} or attempt == attempts - 1:
                 raise last_error from exc
+            retry_after = exc.headers.get("Retry-After", "") if exc.headers else ""
+            try:
+                retry_delay = max(0.0, float(retry_after))
+            except ValueError:
+                retry_delay = 0.0
+            fallback_delay = 15.0 if exc.code == 429 else 0.75 * (2**attempt)
+            time.sleep(min(30.0, max(retry_delay, fallback_delay)))
+            continue
         except (urllib.error.URLError, TimeoutError) as exc:
             last_error = RuntimeError(f"Network error: {type(exc).__name__}")
             if attempt == attempts - 1:
                 raise last_error from exc
-        time.sleep(0.5 * (2**attempt))
+        time.sleep(0.75 * (2**attempt))
     raise last_error or RuntimeError("AI request failed")
 
 
@@ -470,29 +513,111 @@ def call_openai(prompt: str, model: str, api_key: str, max_output_tokens: int, t
     )
 
 
-def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, timeout: float) -> tuple[str, int, int]:
+def gemini_response_schema(prompt_type: str) -> dict[str, Any] | None:
+    string = {"type": "string", "maxLength": 240}
+    narrative = {"type": "string", "maxLength": 12_000}
+    strings = {"type": "array", "items": string, "maxItems": 8}
+    integer = {"type": "integer"}
+    number = {"type": "number"}
+    boolean = {"type": "boolean"}
+
+    def object_array(properties: dict[str, Any], required: list[str], max_items: int = 8) -> dict[str, Any]:
+        return {"type": "array", "items": {"type": "object", "properties": properties, "required": required}, "maxItems": max_items}
+
+    sources = object_array({"title": string, "url": string, "publisher": string, "claimType": string, "notes": string}, ["title", "url"], 4)
+    scenes = object_array({"start": number, "end": number, "narration": string, "visual": string, "onScreenText": string, "sourceNote": string}, ["start", "end", "visual"], 14)
+    asset_prompts = object_array({"scene": string, "prompt": string, "durationSeconds": number, "aspectRatio": string, "negativeConstraints": strings}, ["scene", "prompt"], 12)
+    fields: dict[str, tuple[str, dict[str, Any]]] = {
+        "niche-research": ("summary", {"summary": string, "topicClusters": strings, "validationSprint": object_array({"title": string, "format": string, "reason": string}, ["title", "format"], 12), "risks": strings, "nextAction": string}),
+        "topic-research": ("summary", {"summary": string, "sources": sources, "verifiedFacts": strings, "disputedClaims": strings, "nextAction": string}),
+        "fact-check": ("safeSummary", {"safeSummary": string, "claims": object_array({"claim": string, "status": string, "evidence": string, "caveat": string}, ["claim", "status"], 3), "blockingIssues": strings, "sources": sources}),
+        "competitor-pattern": ("summary", {"summary": string, "patterns": object_array({"pattern": string, "evidence": string, "application": string}, ["pattern", "application"]), "doNotCopy": strings, "transformedPrinciples": strings, "nextAction": string}),
+        "hook-generator": ("hooks", {"hooks": object_array({"text": string, "pattern": string, "whyItWorks": string}, ["text", "pattern"], 12), "recommendedIndex": integer}),
+        "shorts-script": ("script", {"title": string, "hook": string, "script": narrative, "durationSeconds": integer, "factCaveats": strings, "nextAction": string}),
+        "long-script": ("script", {"title": string, "hook": string, "script": narrative, "durationSeconds": integer, "factCaveats": strings, "nextAction": string}),
+        "storyboard": ("scenes", {"title": string, "durationSeconds": integer, "scenes": scenes, "disclosure": string}),
+        "capcut-standard": ("capcutBrief", {"recommendedMode": string, "capcutBrief": narrative, "durationSeconds": integer, "scenes": scenes, "settings": {"type": "object", "properties": {"aspectRatio": string, "voice": string, "captions": string, "avatar": boolean, "regenerationLimit": integer}}, "disclosure": string}),
+        "capcut-director": ("capcutBrief", {"recommendedMode": string, "capcutBrief": narrative, "durationSeconds": integer, "scenes": scenes, "settings": {"type": "object", "properties": {"aspectRatio": string, "voice": string, "captions": string, "avatar": boolean, "regenerationLimit": integer}}, "disclosure": string}),
+        "ai-image": ("assetPrompts", {"assetPrompts": asset_prompts, "continuityRules": strings, "nextAction": string}),
+        "ai-video": ("assetPrompts", {"assetPrompts": asset_prompts, "continuityRules": strings, "nextAction": string}),
+        "thumbnail-title": ("titles", {"titles": strings, "thumbnailConcepts": strings, "recommendedTitle": string, "nextAction": string}),
+        "repurposing": ("repurposingPlan", {"repurposingPlan": narrative, "platformPlans": object_array({"platform": string, "hook": string, "caption": string, "cta": string, "durationSeconds": integer}, ["platform", "hook"], 8), "nextAction": string}),
+        "analytics-postmortem": ("analyticsPostmortem", {"analyticsPostmortem": narrative, "diagnosis": strings, "winningSignals": strings, "nextActions": object_array({"action": string, "impact": string, "effortMinutes": integer}, ["action", "impact"]), "nextVideoIdeas": strings}),
+        "next-video": ("nextVideoIdeas", {"diagnosis": strings, "nextVideoIdeas": object_array({"title": string, "reason": string, "format": string, "priority": integer}, ["title", "reason"], 5), "nextAction": string}),
+    }
+    spec = fields.get(prompt_type)
+    if not spec:
+        return None
+    _primary_field, properties = spec
+    return {"type": "object", "properties": properties, "required": list(properties)}
+
+
+def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, timeout: float, prompt_type: str = "", thinking_level: str = "low") -> tuple[str, int, int, int]:
     encoded_model = urllib.parse.quote(model, safe="")
-    data = post_json(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{encoded_model}:generateContent",
-        {"x-goog-api-key": api_key},
-        {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": max_output_tokens},
-        },
-        timeout,
-    )
-    parts: list[str] = []
-    for candidate in data.get("candidates", []) if isinstance(data.get("candidates"), list) else []:
-        content = candidate.get("content", {}) if isinstance(candidate, dict) else {}
-        for part in content.get("parts", []) if isinstance(content.get("parts"), list) else []:
-            if isinstance(part, dict) and isinstance(part.get("text"), str):
-                parts.append(part["text"])
-    usage = data.get("usageMetadata") if isinstance(data.get("usageMetadata"), dict) else {}
-    return (
-        "\n".join(parts).strip() or json.dumps(data, ensure_ascii=False),
-        int(usage.get("promptTokenCount", 0) or 0),
-        int(usage.get("candidatesTokenCount", 0) or 0),
-    )
+    generation_config: dict[str, Any] = {
+        "maxOutputTokens": max_output_tokens,
+        "responseMimeType": "application/json",
+    }
+    schema = gemini_response_schema(prompt_type)
+    if schema:
+        generation_config["responseSchema"] = schema
+    if model.startswith("gemini-3"):
+        generation_config["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    elif model.startswith("gemini-2.5"):
+        generation_config["thinkingConfig"] = {"thinkingBudget": 256 if thinking_level in {"medium", "high"} else 0}
+    input_tokens = 0
+    output_tokens = 0
+    search_queries = 0
+    retry_instruction = ""
+    for response_attempt in range(2):
+        request_payload: dict[str, Any] = {
+            "contents": [{"parts": [{"text": prompt + retry_instruction}]}],
+            "generationConfig": generation_config,
+        }
+        if model.startswith("gemini-3") and prompt_type in {"niche-research", "topic-research", "fact-check", "competitor-pattern"}:
+            request_payload["tools"] = [{"google_search": {}}]
+        data = post_json(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{encoded_model}:generateContent",
+            {"x-goog-api-key": api_key},
+            request_payload,
+            timeout,
+        )
+        parts: list[str] = []
+        for candidate in data.get("candidates", []) if isinstance(data.get("candidates"), list) else []:
+            content = candidate.get("content", {}) if isinstance(candidate, dict) else {}
+            for part in content.get("parts", []) if isinstance(content.get("parts"), list) else []:
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    parts.append(part["text"])
+            grounding = candidate.get("groundingMetadata", {}) if isinstance(candidate, dict) else {}
+            queries = grounding.get("webSearchQueries", []) if isinstance(grounding, dict) else []
+            search_queries += len(queries) if isinstance(queries, list) else 0
+        usage = data.get("usageMetadata") if isinstance(data.get("usageMetadata"), dict) else {}
+        input_tokens += int(usage.get("promptTokenCount", 0) or 0)
+        output_tokens += int(usage.get("candidatesTokenCount", 0) or 0)
+        result = "\n".join(parts).strip()
+        if result:
+            try:
+                json.loads(result)
+                return result, input_tokens, output_tokens, search_queries
+            except json.JSONDecodeError as exc:
+                if response_attempt == 0:
+                    retry_instruction = (
+                        "\n\nRELIABILITY RETRY: The previous answer did not fit. Return compact valid JSON only, "
+                        "use at most one item per array, keep each non-script string under 160 characters, and close every object and array."
+                    )
+                    continue
+                raise RuntimeError("Gemini produced incomplete structured JSON after one compact retry") from exc
+        feedback = data.get("promptFeedback") if isinstance(data.get("promptFeedback"), dict) else {}
+        candidate_reasons = [
+            str(item.get("finishReason") or item.get("finishMessage") or "").strip()
+            for item in data.get("candidates", []) if isinstance(item, dict)
+        ] if isinstance(data.get("candidates"), list) else []
+        reason = str(feedback.get("blockReason") or next((item for item in candidate_reasons if item), "provider returned no text"))[:120]
+        if response_attempt == 0 and reason.upper() == "RECITATION":
+            retry_instruction = "\n\nWrite an original paraphrase. Do not reproduce memorized or copyrighted wording."
+            continue
+        raise RuntimeError(f"Gemini response unavailable: {reason}")
+    raise RuntimeError("Gemini response unavailable after a safe paraphrase retry")
 
 
 def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
@@ -502,71 +627,87 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
     prompt = str(payload.get("prompt") or "").strip()
     if not prompt:
         raise ValueError("prompt is required")
-    settings = load_settings()
-    enforce_budget(provider, settings)
-    api_key, key_source = provider_key(provider)
-    default_model = str(settings.get("openAiModel" if provider == "openai" else "geminiModel") or "").strip()
-    model = str(payload.get("model") or default_model).strip()
-    if not model:
-        raise ValueError("model is required")
-    max_tokens = int(numeric_setting(settings, "aiMaxOutputTokens", 2500, 128, 16000))
-    requested_tokens = int(payload.get("maxOutputTokens", max_tokens) or max_tokens)
-    max_tokens = min(max_tokens, max(128, requested_tokens))
-    timeout = numeric_setting(settings, "aiRequestTimeoutSeconds", 60, 10, 180)
-    ok = 0
-    error: str | None = None
-    text = ""
-    input_tokens = 0
-    output_tokens = 0
-    estimated_cost = 0.0
-    try:
-        if provider == "openai":
-            text, input_tokens, output_tokens = call_openai(prompt, model, api_key, max_tokens, timeout)
-        else:
-            text, input_tokens, output_tokens = call_gemini(prompt, model, api_key, max_tokens, timeout)
-        estimated_cost = estimate_cost(provider, input_tokens, output_tokens, settings)
-        daily = numeric_setting(settings, "aiDailyBudgetUsd", 2.0, 0, 10_000)
-        monthly = numeric_setting(settings, "aiMonthlyBudgetUsd", 20.0, 0, 100_000)
-        if daily and ai_spend("day") + estimated_cost > daily:
-            raise RuntimeError("This run would exceed the daily AI budget")
-        if monthly and ai_spend("month") + estimated_cost > monthly:
-            raise RuntimeError("This run would exceed the monthly AI budget")
-        ok = 1
-        return {
-            "ok": True,
-            "provider": provider,
-            "model": model,
-            "text": text,
-            "inputTokens": input_tokens,
-            "outputTokens": output_tokens,
-            "estimatedCostUsd": round(estimated_cost, 6),
-            "keySource": key_source,
-            "createdAt": now_iso(),
-        }
-    except Exception as exc:  # noqa: BLE001
-        error = str(exc)[:300]
-        raise
-    finally:
-        with db_conn() as conn:
-            conn.execute(
-                "insert into ai_runs(provider,model,created_at,prompt_chars,response_chars,input_tokens,output_tokens,estimated_cost_usd,ok,error) "
-                "values(?,?,?,?,?,?,?,?,?,?)",
-                (provider, model, now_iso(), len(prompt), len(text), input_tokens, output_tokens, estimated_cost, ok, error),
-            )
+    if len(prompt) > 100_000:
+        raise ValueError("prompt exceeds the 100,000 character limit")
+    prompt_type = str(payload.get("promptType") or "").strip()
+    if prompt_type and prompt_type not in SUPPORTED_PROMPT_TYPES:
+        raise ValueError("unsupported promptType")
+    with AI_RUN_LOCK:
+        settings = load_settings()
+        enforce_budget(provider, settings)
+        api_key, key_source = provider_key(provider)
+        default_model = str(settings.get("openAiModel" if provider == "openai" else "geminiModel") or "").strip()
+        model = str(payload.get("model") or default_model).strip()
+        if not model:
+            raise ValueError("model is required")
+        max_tokens = int(numeric_setting(settings, "aiMaxOutputTokens", 2500, 128, 16000))
+        requested_tokens = int(payload.get("maxOutputTokens", max_tokens) or max_tokens)
+        max_tokens = min(max_tokens, max(128, requested_tokens))
+        timeout = numeric_setting(settings, "aiRequestTimeoutSeconds", 60, 10, 180)
+        ok = 0
+        error: str | None = None
+        text = ""
+        input_tokens = 0
+        output_tokens = 0
+        search_queries = 0
+        estimated_cost = 0.0
+        try:
+            if provider == "openai":
+                text, input_tokens, output_tokens = call_openai(prompt, model, api_key, max_tokens, timeout)
+            else:
+                thinking_level = str(settings.get("geminiThinkingLevel") or "low").strip().lower()
+                if thinking_level not in {"minimal", "low", "medium", "high"}:
+                    thinking_level = "low"
+                text, input_tokens, output_tokens, search_queries = call_gemini(prompt, model, api_key, max_tokens, timeout, prompt_type, thinking_level)
+            estimated_cost = estimate_cost(provider, input_tokens, output_tokens, settings, search_queries)
+            daily, monthly = budget_limits(settings)
+            if daily and ai_spend("day") + estimated_cost > daily:
+                raise RuntimeError("This run would exceed the daily AI budget")
+            if monthly and ai_spend("month") + estimated_cost > monthly:
+                raise RuntimeError("This run would exceed the monthly AI budget")
+            parsed_text = json.loads(text)
+            if isinstance(parsed_text, dict):
+                parsed_text["_providerGenerated"] = provider
+                parsed_text["_groundedSearchQueries"] = search_queries
+                text = json.dumps(parsed_text, ensure_ascii=False)
+            ok = 1
+            return {
+                "ok": True,
+                "provider": provider,
+                "model": model,
+                "promptType": prompt_type or None,
+                "text": text,
+                "inputTokens": input_tokens,
+                "outputTokens": output_tokens,
+                "searchQueries": search_queries,
+                "estimatedCostUsd": round(estimated_cost, 6),
+                "keySource": key_source,
+                "createdAt": now_iso(),
+            }
+        except Exception as exc:  # noqa: BLE001
+            error = str(exc)[:300]
+            raise
+        finally:
+            with db_conn() as conn:
+                conn.execute(
+                    "insert into ai_runs(provider,model,created_at,prompt_chars,response_chars,input_tokens,output_tokens,search_queries,estimated_cost_usd,ok,error) "
+                    "values(?,?,?,?,?,?,?,?,?,?,?)",
+                    (provider, model, now_iso(), len(prompt), len(text), input_tokens, output_tokens, search_queries, estimated_cost, ok, error),
+                )
 
 
 def ai_runs() -> dict[str, Any]:
     with db_conn() as conn:
         rows = conn.execute(
-            "select id,provider,model,created_at,input_tokens,output_tokens,estimated_cost_usd,ok,error "
+            "select id,provider,model,created_at,input_tokens,output_tokens,search_queries,estimated_cost_usd,ok,error "
             "from ai_runs order by id desc limit 100"
         ).fetchall()
     return {
         "runs": [
             {
                 "id": row[0], "provider": row[1], "model": row[2], "createdAt": row[3],
-                "inputTokens": row[4], "outputTokens": row[5], "estimatedCostUsd": row[6],
-                "ok": bool(row[7]), "error": row[8],
+                "inputTokens": row[4], "outputTokens": row[5], "searchQueries": row[6], "estimatedCostUsd": row[7],
+                "ok": bool(row[8]), "error": row[9],
             }
             for row in rows
         ],
@@ -575,8 +716,27 @@ def ai_runs() -> dict[str, Any]:
     }
 
 
+def ai_capabilities() -> dict[str, Any]:
+    settings = load_settings()
+    daily, monthly = budget_limits(settings)
+    return {
+        "ok": True,
+        "promptTypes": list(SUPPORTED_PROMPT_TYPES),
+        "structuredOutput": {"gemini": True, "openai": False},
+        "guardrails": {
+            "promptCharacterLimit": 100_000,
+            "maxOutputTokens": int(numeric_setting(settings, "aiMaxOutputTokens", 2500, 128, 16000)),
+            "dailyBudgetUsd": daily,
+            "monthlyBudgetUsd": monthly,
+            "serializedBudgetChecks": True,
+            "geminiThinkingLevel": str(settings.get("geminiThinkingLevel") or "low"),
+            "keysPersistedInDatabase": False,
+        },
+    }
+
+
 class CreatorHandler(BaseHTTPRequestHandler):
-    server_version = "CreatorEmpireSQLite/1.3"
+    server_version = "CreatorEmpireSQLite/1.4.1"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
@@ -588,6 +748,13 @@ class CreatorHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         try:
             path = urllib.parse.urlparse(self.path).path
+            if path == "/api/health":
+                json_response(self, 200, {
+                    "ok": True,
+                    "service": "creator-empire",
+                    "version": "1.4.1",
+                    "release": os.environ.get("CREATOR_EMPIRE_RELEASE_SHA", "dev"),
+                }); return
             if path == "/api/workspace":
                 json_response(self, 200, load_workspace()); return
             if path == "/api/workspace/history":
@@ -598,12 +765,15 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, secret_status()); return
             if path == "/api/ai/runs":
                 json_response(self, 200, ai_runs()); return
+            if path == "/api/ai/capabilities":
+                json_response(self, 200, ai_capabilities()); return
             self.serve_static()
         except Exception as exc:  # noqa: BLE001
             json_response(self, 500, {"ok": False, "error": str(exc)[:300]})
 
     def do_PUT(self) -> None:  # noqa: N802
         try:
+            validate_request_origin(self)
             if urllib.parse.urlparse(self.path).path == "/api/workspace":
                 json_response(self, 200, save_workspace(read_json(self))); return
             json_response(self, 404, {"ok": False, "error": "Not found"})
@@ -612,6 +782,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         try:
+            validate_request_origin(self)
             path = urllib.parse.urlparse(self.path).path
             payload = read_json(self)
             if path == "/api/secrets":
@@ -626,6 +797,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:  # noqa: N802
         try:
+            validate_request_origin(self)
             path = urllib.parse.urlparse(self.path).path
             if path.startswith("/api/secrets/"):
                 provider = path.rsplit("/", 1)[-1]
@@ -653,6 +825,8 @@ class CreatorHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.send_header("X-Frame-Options", "DENY")
         self.end_headers()
         self.wfile.write(body)
 

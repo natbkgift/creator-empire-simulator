@@ -11,6 +11,11 @@ import { syncCurrentRouteToFocus } from './workflow-controller.js';
 
 const sidebarKey = 'creator-empire:sidebar-expanded';
 
+const setSidebarExpanded = (expanded: boolean): void => {
+  document.body.classList.toggle('sidebar-expanded', expanded);
+  document.querySelector<HTMLElement>('[data-action="toggle-sidebar"]')?.setAttribute('aria-expanded', String(expanded));
+};
+
 const openMobileWorkspaceControls = (): void => {
   const workspace = getWorkspace();
   const channel = activeChannel(workspace);
@@ -47,9 +52,10 @@ const installEditorialInteractions = (): void => {
   if (typeof document === 'undefined' || typeof window === 'undefined') return;
 
   try {
-    document.body.classList.toggle('sidebar-expanded', window.localStorage.getItem(sidebarKey) === '1');
+    const saved = window.localStorage.getItem(sidebarKey);
+    setSidebarExpanded(saved === null ? window.matchMedia('(min-width: 1280px)').matches : saved === '1');
   } catch {
-    document.body.classList.remove('sidebar-expanded');
+    setSidebarExpanded(window.matchMedia('(min-width: 1280px)').matches);
   }
 
   document.addEventListener('click', (event) => {
@@ -58,7 +64,7 @@ const installEditorialInteractions = (): void => {
     const action = target.dataset.action;
     if (action === Actions.TOGGLE_SIDEBAR) {
       const expanded = !document.body.classList.contains('sidebar-expanded');
-      document.body.classList.toggle('sidebar-expanded', expanded);
+      setSidebarExpanded(expanded);
       try { window.localStorage.setItem(sidebarKey, expanded ? '1' : '0'); } catch { /* UI preference only */ }
     } else if (action === Actions.OPEN_MOBILE_CONTROLS) {
       openMobileWorkspaceControls();

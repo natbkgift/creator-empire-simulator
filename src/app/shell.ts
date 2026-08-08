@@ -57,7 +57,7 @@ export const renderShell = (workspace: Workspace, route: string, content: string
       <a class="skip-link" href="#main-content">Skip to content</a>
       <div class="app-shell">
         <aside class="side-rail" aria-label="Main navigation">
-          <button class="brand-orbit" type="button" data-action="toggle-sidebar" aria-label="Expand or collapse sidebar" title="Creator Empire"><span class="brand-mark-text">CE</span><span class="brand-copy"><strong>Creator</strong><small>Empire</small></span></button>
+          <button class="brand-orbit" type="button" data-action="toggle-sidebar" aria-label="Expand or collapse sidebar" aria-expanded="false" title="Creator Empire"><span class="brand-mark-text">CE</span><span class="brand-copy"><strong>Creator</strong><small>Empire</small></span></button>
           <nav class="side-nav">${nav}</nav>
           <div class="nav-spacer"></div>
           <a class="side-ai-status" href="${routeHref('settings')}" title="${escapeHtml(workflowLabel)}"><span class="orb ${workspace.settings.workflowMode === 'automatic' ? 'healthy' : ''}"></span><span class="side-ai-copy"><strong>${workspace.settings.workflowMode === 'automatic' ? 'AI Assisted' : 'Manual'}</strong><small>${workspace.settings.workflowMode === 'automatic' ? escapeHtml(workspace.settings.aiProvider === 'openai' ? workspace.settings.openAiModel : workspace.settings.geminiModel) : 'External AI workflow'}</small></span></a>

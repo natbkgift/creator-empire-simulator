@@ -23,6 +23,7 @@ export const showToast = (message: string, tone: 'success' | 'warning' | 'danger
 export const openDialog = (title: string, body: string, size: 'sm' | 'md' | 'lg' | 'xl' = 'lg'): HTMLDialogElement => {
   const existing = document.getElementById('app-dialog');
   existing?.remove();
+  const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
   const dialog = document.createElement('dialog');
   dialog.id = 'app-dialog';
   dialog.className = `app-dialog ${size}`;
@@ -33,7 +34,20 @@ export const openDialog = (title: string, body: string, size: 'sm' | 'md' | 'lg'
     if (target.hasAttribute('data-dialog-close')) dialog.close();
     if (target === dialog) dialog.close();
   });
-  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    dialog.close();
+  });
+  dialog.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      dialog.close();
+    }
+  });
+  dialog.addEventListener('close', () => {
+    dialog.remove();
+    returnFocus?.focus();
+  }, { once: true });
   dialog.showModal();
   return dialog;
 };

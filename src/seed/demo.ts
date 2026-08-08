@@ -388,6 +388,8 @@ export const createSeedWorkspace = (): Workspace => ({
     aiProvider: 'openai',
     openAiModel: 'gpt-5.1',
     geminiModel: 'gemini-3.5-flash',
+    geminiThinkingLevel: 'low',
+    geminiSearchUsdPerQuery: 0.014,
     connectedAiEnabled: false,
     connectedAiProxyUrl: '/api/ai/generate',
     sqliteStorageEnabled: true,

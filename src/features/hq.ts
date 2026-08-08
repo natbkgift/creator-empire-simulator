@@ -3,7 +3,20 @@ import { escapeHtml, todayIso } from '../domain/utils.js';
 import { activeChannel, activeProject, capacityStats, dailyMission, nextBestAction, projectProgress, projectsInFocus, statusLabels } from '../app/selectors.js';
 import { routeHref } from '../app/router.js';
 import { button, chip, pageHeader, progress } from '../ui/components.js';
-import { isProductionComplete } from '../domain/workflow.js';
+import { isProductionComplete, workflowStageRank } from '../domain/workflow.js';
+
+const missionStageRail = (status?: Workspace['projects'][number]['status']): string => {
+  const stages = [
+    { label: 'Plan', startsAt: 0 },
+    { label: 'Research', startsAt: 2 },
+    { label: 'Script', startsAt: 4 },
+    { label: 'Produce', startsAt: 7 },
+    { label: 'Publish', startsAt: 11 },
+  ];
+  const rank = status ? workflowStageRank(status) : 0;
+  const activeIndex = stages.reduce((current, stage, index) => rank >= stage.startsAt ? index : current, 0);
+  return `<div class="mission-stage-rail" aria-label="Production stages">${stages.map((stage, index) => `<span class="mission-stage-step ${index < activeIndex ? 'done' : index === activeIndex ? 'active' : ''}" ${index === activeIndex ? 'aria-current="step"' : ''}>${stage.label}</span>`).join('')}</div>`;
+};
 
 export const renderHq = (workspace: Workspace): string => {
   const channel = activeChannel(workspace);
@@ -21,7 +34,7 @@ export const renderHq = (workspace: Workspace): string => {
 
   return `${pageHeader('Today','เห็นเฉพาะสิ่งที่ควรทำต่อ แล้วให้ Mission เปิด Prompt / CapCut / Policy ตาม Context ให้เอง', `<a class="btn" href="${routeHref('calendar')}">Calendar</a><a class="btn primary" href="${routeHref('blueprint', channel ? { channel: channel.id } : undefined)}">+ Plan video</a>`)}
     <section class="panel mission-deck">
-      <div class="mission-title"><span class="kicker">NEXT MISSION · +${mission.xp} XP</span><h3>${escapeHtml(mission.title)}</h3><p>${escapeHtml(mission.detail)}</p><div class="mission-meta">${channel ? chip(channel.name,'cyan') : chip('Portfolio','violet')}${project ? chip(statusLabels[project.status], productionComplete ? 'green' : 'amber') : ''}</div><div class="row wrap" style="margin-top:16px">${button('Start now','start-mission',{tone:'primary',iconName:'play',attrs:actionAttrs})}${project ? `<a class="btn" href="${routeHref('calendar',{project:project.id})}">View plan</a>` : ''}</div></div>
+      <div class="mission-title"><span class="kicker">NEXT MISSION · +${mission.xp} XP</span><h3>${escapeHtml(mission.title)}</h3><p>${escapeHtml(mission.detail)}</p><div class="mission-meta">${channel ? chip(channel.name,'cyan') : chip('Portfolio','violet')}${project ? chip(statusLabels[project.status], productionComplete ? 'green' : 'amber') : ''}</div>${missionStageRail(project?.status)}<div class="row wrap" style="margin-top:16px">${button('Start now','start-mission',{tone:'primary',iconName:'play',attrs:actionAttrs})}${project ? `<a class="btn" href="${routeHref('calendar',{project:project.id})}">View plan</a>` : ''}</div></div>
       <div class="progress-orbit" aria-label="Project progress ${mission.progress}%"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="48"/><circle class="fill" cx="60" cy="60" r="48" style="stroke-dasharray:302;stroke-dashoffset:${302 * (1 - mission.progress / 100)}"/></svg><div class="orbit-copy"><b>${mission.progress}%</b><span>${productionComplete ? 'complete' : 'to publish'}</span></div></div>
     </section>
 

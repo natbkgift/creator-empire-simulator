@@ -1,4 +1,4 @@
-const CACHE = 'creator-empire-v1.2.0';
+const CACHE = 'creator-empire-v1.4.1';
 const ASSETS = [
   './', './index.html', './styles/app.css', './manifest.webmanifest',
   './icon.svg', './styles/variables.css', './styles/base.css', './styles/layout.css', './styles/components.css',
@@ -11,7 +11,7 @@ const ASSETS = [
   './src/controllers/ai-controller.js', './src/controllers/command-palette.js', './src/controllers/entity-controller.js',
   './src/controllers/helpers.js', './src/controllers/import-export-controller.js', './src/controllers/settings-controller.js',
   './src/controllers/workflow-controller.js',
-  './src/db/indexeddb.js', './src/domain/actions.js', './src/domain/blueprint.js', './src/domain/focus.js', './src/domain/migration.js', './src/domain/progression.js',
+  './src/db/indexeddb.js', './src/domain/actions.js', './src/domain/ai-contracts.js', './src/domain/blueprint.js', './src/domain/focus.js', './src/domain/migration.js', './src/domain/progression.js',
   './src/domain/prompts.js', './src/domain/scoring.js', './src/domain/simulator.js', './src/domain/types.js',
   './src/domain/utils.js', './src/domain/validation.js', './src/domain/workflow.js', './src/features/analytics.js', './src/features/blueprint.js',
   './src/features/calendar.js', './src/features/capcut.js', './src/features/hq.js', './src/features/ideas.js', './src/features/mission.js',
@@ -40,13 +40,18 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-      if (response.ok && new URL(event.request.url).origin === self.location.origin) {
-        const clone = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(event.request, clone));
-      }
-      return response;
-    }).catch(() => caches.match('./index.html'))),
-  );
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+  event.respondWith(fetch(event.request).then((response) => {
+    if (response.ok) {
+      const clone = response.clone();
+      caches.open(CACHE).then((cache) => cache.put(event.request, clone));
+    }
+    return response;
+  }).catch(async () => {
+    const cached = await caches.match(event.request);
+    if (cached) return cached;
+    if (event.request.mode === 'navigate') return caches.match('./index.html');
+    return Response.error();
+  }));
 });

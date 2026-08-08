@@ -13,6 +13,7 @@ import {
   workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
 } from '../dist/src/domain/workflow.js';
 import { migrateWorkspace } from '../dist/src/domain/migration.js';
+import { aiWorkflowCoverage, promptResponseContracts } from '../dist/src/domain/ai-contracts.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -31,6 +32,18 @@ test('seed library contains 5 categories and 50 ideas', () => {
 test('all language scores stay in valid ranges', () => {
   for (const idea of seedIdeas) for (const language of ['en','th']) {
     const score = idea.score[language]; assert.ok(score.total >= 0 && score.total <= 100); assert.ok(score.estimatedCreditsHigh >= score.estimatedCreditsLow); assert.ok(score.productionMinutes > 0);
+  }
+});
+
+test('all 16 AI prompt workflows have structured validation and persisted destinations', () => {
+  assert.equal(promptTypes.length, 16);
+  assert.deepEqual(new Set(promptTypes.map((item) => item.id)), new Set(Object.keys(promptResponseContracts)));
+  assert.deepEqual(aiWorkflowCoverage, { promptTypes: 16, structuredContracts: 16, persistedContracts: 16 });
+  for (const { id } of promptTypes) {
+    const contract = promptResponseContracts[id];
+    const response = JSON.stringify({ [contract.requiredAny[0]]: contract.requiredAny[0].endsWith('s') ? ['covered'] : 'covered' });
+    assert.equal(validatePromptResponse(response, id).valid, true, id);
+    assert.equal(validatePromptResponse('{"unrelated":true}', id).valid, false, id);
   }
 });
 

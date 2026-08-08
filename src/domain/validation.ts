@@ -1,6 +1,7 @@
-import type { Workspace } from './types.js';
+import type { PromptType, Workspace } from './types.js';
 import { isRecord } from './utils.js';
 import { migrateWorkspace } from './migration.js';
+import { validatePromptContract } from './ai-contracts.js';
 
 export interface ValidationResult {
   valid: boolean;
@@ -32,15 +33,22 @@ export const validateWorkspace = (input: unknown): ValidationResult => {
   }
 };
 
-export const validatePromptResponse = (input: string): {
+export const validatePromptResponse = (input: string, type?: PromptType): {
   valid: boolean;
   parsed?: Record<string, unknown>;
   error?: string;
 } => {
   try {
-    const cleaned = input.trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+    const withoutFence = input.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+    const firstBrace = withoutFence.indexOf('{');
+    const lastBrace = withoutFence.lastIndexOf('}');
+    const cleaned = firstBrace >= 0 && lastBrace >= firstBrace ? withoutFence.slice(firstBrace, lastBrace + 1) : withoutFence;
     const parsed = JSON.parse(cleaned) as unknown;
     if (!isRecord(parsed)) return { valid: false, error: 'The response must be a JSON object.' };
+    if (type) {
+      const contractError = validatePromptContract(parsed, type);
+      if (contractError) return { valid: false, error: contractError };
+    }
     return { valid: true, parsed };
   } catch (error) {
     return { valid: false, error: error instanceof Error ? error.message : 'Invalid JSON.' };

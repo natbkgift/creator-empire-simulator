@@ -62,6 +62,9 @@ PROJECT CONTEXT
 };
 
 const outputSchema = (type: PromptType): string => {
+  if (type === 'niche-research') {
+    return `Return valid JSON only:\n{"summary":"...","topicClusters":["..."],"validationSprint":[{"title":"...","format":"shorts|long","reason":"..."}],"risks":["..."],"nextAction":"..."}`;
+  }
   if (type === 'topic-research') {
     return `Return valid JSON only:\n{"summary":"...","sources":[{"title":"...","url":"...","publisher":"...","claimType":"documented|reported|disputed|context","notes":"..."}],"verifiedFacts":["..."],"disputedClaims":["..."],"nextAction":"..."}`;
   }
@@ -70,6 +73,9 @@ const outputSchema = (type: PromptType): string => {
   }
   if (type === 'fact-check') {
     return `Return valid JSON only:\n{"claims":[{"claim":"...","status":"documented|reported|disputed|unsupported","evidence":"...","caveat":"..."}],"blockingIssues":[],"safeSummary":"...","sources":[{"title":"...","url":"...","publisher":"...","claimType":"documented|reported|disputed|context","notes":"..."}]}`;
+  }
+  if (type === 'competitor-pattern') {
+    return `Return valid JSON only:\n{"summary":"...","patterns":[{"pattern":"...","evidence":"...","application":"..."}],"doNotCopy":["..."],"transformedPrinciples":["..."],"nextAction":"..."}`;
   }
   if (type === 'shorts-script' || type === 'long-script') {
     return `Return valid JSON only:\n{"title":"...","hook":"...","script":"...","durationSeconds":55,"factCaveats":["..."],"nextAction":"..."}`;

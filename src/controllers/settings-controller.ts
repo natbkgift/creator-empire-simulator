@@ -14,6 +14,8 @@ export const saveSettings = (form: HTMLFormElement): void => {
     draft.settings.aiProvider = stringFrom(data, 'aiProvider') === 'gemini' ? 'gemini' : 'openai';
     draft.settings.openAiModel = stringFrom(data, 'openAiModel', 'gpt-5.1') || 'gpt-5.1';
     draft.settings.geminiModel = stringFrom(data, 'geminiModel', 'gemini-3.5-flash') || 'gemini-3.5-flash';
+    const geminiThinkingLevel = stringFrom(data, 'geminiThinkingLevel', 'low');
+    draft.settings.geminiThinkingLevel = ['minimal', 'low', 'medium', 'high'].includes(geminiThinkingLevel) ? geminiThinkingLevel as 'minimal' | 'low' | 'medium' | 'high' : 'low';
     draft.settings.connectedAiEnabled = draft.settings.workflowMode === 'automatic';
     draft.settings.connectedAiProxyUrl = '/api/ai/generate';
     draft.settings.sqliteStorageEnabled = true;
@@ -25,6 +27,7 @@ export const saveSettings = (form: HTMLFormElement): void => {
     draft.settings.openAiOutputUsdPer1M = Math.max(0, numberFrom(data, 'openAiOutputUsdPer1M', 0));
     draft.settings.geminiInputUsdPer1M = Math.max(0, numberFrom(data, 'geminiInputUsdPer1M', 0));
     draft.settings.geminiOutputUsdPer1M = Math.max(0, numberFrom(data, 'geminiOutputUsdPer1M', 0));
+    draft.settings.geminiSearchUsdPerQuery = Math.max(0, numberFrom(data, 'geminiSearchUsdPerQuery', 0.014));
     draft.settings.workdayStart = stringFrom(data, 'workdayStart', '09:00') || '09:00';
     draft.settings.workdayEnd = stringFrom(data, 'workdayEnd', '18:00') || '18:00';
     draft.settings.defaultPublishTime = stringFrom(data, 'defaultPublishTime', '19:00') || '19:00';

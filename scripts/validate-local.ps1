@@ -20,15 +20,19 @@ if ($python -eq 'py') { py -3 --version } else { python --version }
 
 Write-Host '[2/6] Install exact npm dependencies'
 npm ci
+if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
 
 Write-Host '[3/6] TypeScript + domain/UI tests'
 npm test
+if ($LASTEXITCODE -ne 0) { throw "npm test failed with exit code $LASTEXITCODE" }
 
 Write-Host '[4/6] SQLite/data-security regression tests'
 if ($python -eq 'py') { py -3 tests/server-v1.3.py } else { python tests/server-v1.3.py }
+if ($LASTEXITCODE -ne 0) { throw "server regression tests failed with exit code $LASTEXITCODE" }
 
 Write-Host '[5/6] Windows launcher regression test'
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/windows-startup-v1.3.ps1
+if ($LASTEXITCODE -ne 0) { throw "Windows launcher test failed with exit code $LASTEXITCODE" }
 
 Write-Host '[6/6] Repository hygiene guard'
 $tracked = git ls-files | Select-String -Pattern '(^dist/|^data/|\.sqlite$|\.sqlite-wal$|\.sqlite-shm$|^\.env$)'
@@ -65,8 +69,10 @@ if ($Browser) {
     if (-not $ready) { throw 'Local server did not become ready for browser E2E.' }
     Write-Host '[Browser regression] v1.3 data/recovery contracts'
     if ($python -eq 'py') { py -3 tests/browser-v1.3.py } else { python tests/browser-v1.3.py }
+    if ($LASTEXITCODE -ne 0) { throw "browser-v1.3 failed with exit code $LASTEXITCODE" }
     Write-Host '[Browser acceptance] v1.4 frozen Editorial Creator OS'
     if ($python -eq 'py') { py -3 tests/browser-v1.4.py } else { python tests/browser-v1.4.py }
+    if ($LASTEXITCODE -ne 0) { throw "browser-v1.4 failed with exit code $LASTEXITCODE" }
   } finally {
     if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
     Remove-Item Env:CREATOR_EMPIRE_DB -ErrorAction SilentlyContinue
