@@ -74,7 +74,7 @@ export const renderShell = (workspace: Workspace, route: string, content: string
         <div class="focus-mobile-bar">
           <div class="mobile-context-copy"><span>${workspace.focus.mode === 'portfolio' ? 'Portfolio' : escapeHtml(channel?.name ?? 'Choose channel')}</span><strong>${escapeHtml(project?.title ?? 'All channels')}</strong>${project ? `<small>${escapeHtml(statusLabels[project.status])}</small>` : ''}</div>
           <button class="mobile-search" data-action="open-command" aria-label="Search">${icon('search')}</button>
-          <button class="mobile-more" data-action="open-focus-picker" aria-label="Workspace controls">•••</button>
+          <button class="mobile-more" data-action="open-mobile-controls" aria-label="Workspace controls">•••</button>
         </div>
         <main id="main-content" class="content" tabindex="-1">${content}</main>
       </div>
