@@ -4,6 +4,7 @@
 export const Actions = {
   OPEN_COMMAND: 'open-command',
   OPEN_FOCUS_PICKER: 'open-focus-picker',
+  OPEN_MOBILE_CONTROLS: 'open-mobile-controls',
   TOGGLE_SIDEBAR: 'toggle-sidebar',
   PORTFOLIO_MODE: 'portfolio-mode',
   FOCUS_PRIMARY_CHANNEL: 'focus-primary-channel',
