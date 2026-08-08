@@ -1,16 +1,20 @@
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $port = 4173
-$temp = Join-Path $env:RUNNER_TEMP 'creator-empire-win-test'
+$runtimeRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } elseif ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
+$temp = Join-Path $runtimeRoot 'creator-empire-win-test'
 New-Item -ItemType Directory -Force -Path $temp | Out-Null
 $db = Join-Path $temp 'creator_empire.sqlite'
+Remove-Item $db -Force -ErrorAction SilentlyContinue
+Remove-Item "$db-wal" -Force -ErrorAction SilentlyContinue
+Remove-Item "$db-shm" -Force -ErrorAction SilentlyContinue
 $env:CREATOR_EMPIRE_DB = $db
 $env:CREATOR_EMPIRE_NO_BROWSER = '1'
 
 $process = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'START-HERE-WINDOWS.bat' -WorkingDirectory $repo -PassThru -WindowStyle Hidden
 try {
   $ready = $false
-  for ($i = 0; $i -lt 40; $i++) {
+  for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Milliseconds 250
     try {
       $response = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/storage" -TimeoutSec 2
