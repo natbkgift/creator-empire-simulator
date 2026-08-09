@@ -68,6 +68,9 @@ def main() -> None:
         assert_true("ai_runs" in tables, "ai_runs table missing")
         assert_true("autopilot_jobs" in tables and "autopilot_steps" in tables, "autopilot job tables missing")
         assert_true("youtube_connections" in tables and "video_assets" in tables and "youtube_uploads" in tables, "YouTube integration tables missing")
+        with server.db_conn() as conn:
+            upload_columns = server.column_names(conn, "youtube_uploads")
+        assert_true("job_id" in upload_columns, "YouTube uploads must be scoped to an Autopilot job")
         assert_true("ai_secrets" not in tables, "plaintext ai_secrets table must not exist")
         assert_true(legacy_secret.encode() not in server.DB_PATH.read_bytes(), "legacy plaintext key remains recoverable in SQLite file")
         print("PASS legacy plaintext secret table and bytes are securely purged")
@@ -227,6 +230,20 @@ def main() -> None:
             server.urllib.request.urlopen = original_urlopen
             server.time.sleep = original_sleep
         print("PASS YouTube OAuth state, encrypted token storage, upload-only scope and private resumable upload contract")
+
+        # A completed upload from another project must never appear on a newly
+        # approved package. This regression protects the handoff screen from
+        # showing stale global YouTube success state across Autopilot jobs.
+        with server.db_conn() as conn:
+            created = server.now_iso()
+            conn.execute(
+                "insert into youtube_uploads(id,asset_id,job_id,status,progress,metadata_json,video_id,video_url,created_at,updated_at) values(?,?,?,'uploaded',100,'{}',?,?,?,?)",
+                ("yt-old", "asset-old", "job-old", "old-video", "https://youtu.be/old-video", created, created),
+            )
+        assert_true(server.youtube_status("job-new")["latestUpload"] is None, "new job inherited another job's YouTube upload state")
+        scoped_upload = server.youtube_status("job-old")["latestUpload"]
+        assert_true(scoped_upload and scoped_upload["videoId"] == "old-video", "job-scoped YouTube status did not return its own upload")
+        print("PASS YouTube handoff status is isolated per Autopilot job")
 
         previous_upload_dir = server.VIDEO_UPLOAD_DIR
         server.VIDEO_UPLOAD_DIR = Path(temp) / "video-assets"

@@ -220,6 +220,7 @@ def ensure_db() -> None:
         create table if not exists youtube_uploads (
           id text primary key,
           asset_id text not null,
+          job_id text,
           status text not null,
           progress integer not null default 0,
           metadata_json text not null,
@@ -232,6 +233,10 @@ def ensure_db() -> None:
           updated_at text not null
         )
         """)
+        # Additive migration for releases created before uploads were scoped to
+        # the Autopilot package that owns the MP4 handoff.
+        ensure_column(conn, "youtube_uploads", "job_id", "text")
+        conn.execute("create index if not exists idx_youtube_uploads_job_created on youtube_uploads(job_id,created_at desc)")
         # v1.2 persisted plaintext provider keys. Secure-delete rows before removing the table.
         legacy_secret_table = table_exists(conn, "ai_secrets")
         if legacy_secret_table:
@@ -1271,11 +1276,16 @@ def _youtube_config() -> dict[str, str]:
     return config
 
 
-def youtube_status() -> dict[str, Any]:
+def youtube_status(job_id: str = "") -> dict[str, Any]:
     configured = bool(os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip() and os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip() and os.environ.get("CREATOR_EMPIRE_TOKEN_KEY", "").strip())
     with db_conn() as conn:
         connected = conn.execute("select 1 from youtube_connections where id='default'").fetchone() is not None
-        latest = conn.execute("select id,status,progress,video_id,video_url,error,updated_at from youtube_uploads order by created_at desc limit 1").fetchone()
+        latest = conn.execute(
+            "select id,status,progress,video_id,video_url,error,updated_at from youtube_uploads where job_id=? order by created_at desc limit 1",
+            (job_id,),
+        ).fetchone() if job_id else conn.execute(
+            "select id,status,progress,video_id,video_url,error,updated_at from youtube_uploads order by created_at desc limit 1"
+        ).fetchone()
     upload = None if not latest else {"id": latest[0], "status": latest[1], "progress": int(latest[2]), "videoId": latest[3], "videoUrl": latest[4], "error": latest[5], "updatedAt": latest[6]}
     return {"ok": True, "configured": configured, "connected": connected, "scope": YOUTUBE_UPLOAD_SCOPE, "privacyStatus": "private", "latestUpload": upload}
 
@@ -1431,10 +1441,16 @@ def receive_video_asset(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
 
 def create_youtube_upload(payload: dict[str, Any]) -> dict[str, Any]:
     asset_id = str(payload.get("assetId") or "").strip()
+    job_id = str(payload.get("jobId") or "").strip()
+    if not job_id:
+        raise ValueError("An approved Autopilot job is required")
     with db_conn() as conn:
         asset = conn.execute("select status from video_assets where id=?", (asset_id,)).fetchone()
+        job = conn.execute("select status from autopilot_jobs where id=?", (job_id,)).fetchone()
     if not asset or asset[0] != "ready":
         raise ValueError("A ready video asset is required")
+    if not job or job[0] != "approved":
+        raise ValueError("An approved Autopilot job is required")
     if not youtube_status()["connected"]:
         raise RuntimeError("Connect YouTube before uploading")
     raw = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
@@ -1450,8 +1466,8 @@ def create_youtube_upload(payload: dict[str, Any]) -> dict[str, Any]:
     created = now_iso()
     with db_conn() as conn:
         conn.execute(
-            "insert into youtube_uploads(id,asset_id,status,progress,metadata_json,created_at,updated_at) values(?,?, 'queued',0,?,?,?)",
-            (upload_id, asset_id, canonical_json(metadata), created, created),
+            "insert into youtube_uploads(id,asset_id,job_id,status,progress,metadata_json,created_at,updated_at) values(?,?,?,'queued',0,?,?,?)",
+            (upload_id, asset_id, job_id, canonical_json(metadata), created, created),
         )
     YOUTUBE_WAKE.set()
     return get_youtube_upload(upload_id)
@@ -1459,10 +1475,10 @@ def create_youtube_upload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def get_youtube_upload(upload_id: str) -> dict[str, Any]:
     with db_conn() as conn:
-        row = conn.execute("select id,asset_id,status,progress,video_id,video_url,error,created_at,updated_at from youtube_uploads where id=?", (upload_id,)).fetchone()
+        row = conn.execute("select id,asset_id,job_id,status,progress,video_id,video_url,error,created_at,updated_at from youtube_uploads where id=?", (upload_id,)).fetchone()
     if not row:
         raise KeyError("YouTube upload not found")
-    return {"ok": True, "upload": {"id": row[0], "assetId": row[1], "status": row[2], "progress": int(row[3]), "videoId": row[4], "videoUrl": row[5], "error": row[6], "createdAt": row[7], "updatedAt": row[8]}}
+    return {"ok": True, "upload": {"id": row[0], "assetId": row[1], "jobId": row[2], "status": row[3], "progress": int(row[4]), "videoId": row[5], "videoUrl": row[6], "error": row[7], "createdAt": row[8], "updatedAt": row[9]}}
 
 
 def _initiate_youtube_session(access_token: str, metadata: dict[str, Any], size: int) -> str:
@@ -1684,7 +1700,8 @@ class CreatorHandler(BaseHTTPRequestHandler):
             if path == "/api/ai/capabilities":
                 json_response(self, 200, ai_capabilities()); return
             if path == "/api/youtube/status":
-                json_response(self, 200, youtube_status()); return
+                query = urllib.parse.parse_qs(parsed_url.query)
+                json_response(self, 200, youtube_status(query.get("jobId", [""])[0][:120])); return
             if path == "/api/youtube/oauth/start":
                 query = urllib.parse.parse_qs(parsed_url.query)
                 redirect_response(self, youtube_oauth_url(query.get("returnTo", ["/#/beta/create"])[0])); return

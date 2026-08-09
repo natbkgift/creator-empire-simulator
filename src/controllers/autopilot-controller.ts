@@ -180,7 +180,8 @@ const refreshYoutubeStatus = async (): Promise<void> => {
   const target = document.querySelector<HTMLElement>('#youtube-state');
   if (!target) return;
   try {
-    const status = await fetchJson<{ configured: boolean; connected: boolean; latestUpload?: { id: string; status: string; progress: number; videoId?: string; videoUrl?: string; error?: string } }>('/api/youtube/status');
+    const jobId = activeJob?.id ?? '';
+    const status = await fetchJson<{ configured: boolean; connected: boolean; latestUpload?: { id: string; status: string; progress: number; videoId?: string; videoUrl?: string; error?: string } }>(`/api/youtube/status?jobId=${encodeURIComponent(jobId)}`);
     if (!status.configured) {
       target.innerHTML = '<p class="youtube-blocked">ยังไม่ได้ตั้งค่า Google OAuth Web Client บนเซิร์ฟเวอร์</p>';
       return;
@@ -213,10 +214,10 @@ const uploadYoutube = async (): Promise<void> => {
   if (!file || !activeJob?.package) { showToast('เลือกไฟล์ MP4 ก่อน', 'warning'); return; }
   const target = document.querySelector<HTMLElement>('#youtube-state');
   if (target) target.innerHTML = '<p>กำลังส่งไฟล์ไปยังเซิร์ฟเวอร์อย่างปลอดภัย…</p>';
-  const assetResponse = await fetch('/api/video-assets', { method: 'POST', headers: { 'content-type': 'video/mp4', 'x-filename': encodeURIComponent(file.name) }, body: file });
+  const assetResponse = await fetch('/api/video-assets', { method: 'POST', headers: { 'content-type': 'video/mp4', 'x-filename': encodeURIComponent(file.name), 'x-project-id': activeJob.id }, body: file });
   if (!assetResponse.ok) throw new Error((await assetResponse.json().catch(() => ({})) as { error?: string }).error || 'อัปโหลดไฟล์ชั่วคราวไม่สำเร็จ');
   const asset = await assetResponse.json() as { asset: { id: string } };
-  await fetchJson('/api/youtube/uploads', { method: 'POST', body: JSON.stringify({ assetId: asset.asset.id, metadata: { ...activeJob.package.metadata, containsSyntheticMedia: true } }) });
+  await fetchJson('/api/youtube/uploads', { method: 'POST', body: JSON.stringify({ assetId: asset.asset.id, jobId: activeJob.id, metadata: { ...activeJob.package.metadata, containsSyntheticMedia: true } }) });
   await refreshYoutubeStatus();
 };
 
