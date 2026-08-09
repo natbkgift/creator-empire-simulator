@@ -1,4 +1,4 @@
-# Creator Empire Simulator v1.4.6
+# Creator Empire Simulator v1.5.0
 
 ระบบวางแผนและผลิตวิดีโอหลายช่องแบบ **Channel Strategy → Today Mission → Calendar Plan → Production → Publish → Growth** โดยใช้ SQLite แบบ revisioned เป็น durable store, IndexedDB เป็น offline mirror และรองรับทั้ง Manual กับ AI Assisted (OpenAI / Gemini)
 
@@ -12,6 +12,23 @@
 ```
 
 Local server bind เฉพาะ `127.0.0.1` โดยค่าเริ่มต้น
+
+## v1.5 — Light Studio + One-click Autopilot
+
+เปิด Simple Mode ที่ `#/beta/create` เพื่อสร้างชุดวิดีโอครบห้าขั้นด้วยปุ่มเดียว:
+
+```text
+Luna Research → Luna Content Plan → Luna Script → Terra Fact-check → Luna Production Pack → Human Review
+```
+
+- งานรันบน background worker และกลับมาทำต่อหลัง refresh หรือ service restart
+- Luna/Terra ต่อ Autopilot job เท่ากับ 4/1 หรือ 80/20
+- Research และ Fact-check ต้องมี web grounding มิฉะนั้นหยุดแบบ fail-closed
+- Package ZIP มี script, captions, storyboard, metadata, asset prompts และ brief สำหรับ CapCut/Canva
+- Expert Mode และ workflow 17 ขั้นเดิมใช้ข้อมูลชุดเดียวกันผ่าน workspace schema v5
+- YouTube ใช้ OAuth upload-only scope, encrypted refresh token และอัปโหลดแบบ resumable เป็น Private เท่านั้น
+
+การเปิด YouTube upload ต้องตั้งค่า `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` และ `CREATOR_EMPIRE_TOKEN_KEY` ใน environment ของ server ห้ามใช้ Google AI Studio API key แทน OAuth client
 
 ## UX/UI v1.4 — Editorial Creator OS
 

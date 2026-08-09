@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 
-Write-Host '== Creator Empire v1.4 Local Validation ==' -ForegroundColor Cyan
+Write-Host '== Creator Empire v1.5 Local Validation ==' -ForegroundColor Cyan
 Write-Host "Repo: $repo"
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js 20+ is required.' }
@@ -70,7 +70,7 @@ if ($Browser) {
     Write-Host '[Browser regression] v1.3 data/recovery contracts'
     if ($python -eq 'py') { py -3 tests/browser-v1.3.py } else { python tests/browser-v1.3.py }
     if ($LASTEXITCODE -ne 0) { throw "browser-v1.3 failed with exit code $LASTEXITCODE" }
-    Write-Host '[Browser acceptance] v1.4 frozen Editorial Creator OS'
+    Write-Host '[Browser acceptance] v1.4 Expert compatibility shell'
     if ($python -eq 'py') { py -3 tests/browser-v1.4.py } else { python tests/browser-v1.4.py }
     if ($LASTEXITCODE -ne 0) { throw "browser-v1.4 failed with exit code $LASTEXITCODE" }
   } finally {

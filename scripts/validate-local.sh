@@ -7,7 +7,7 @@ cd "$ROOT"
 BROWSER=0
 if [[ "${1:-}" == "--browser" ]]; then BROWSER=1; fi
 
-printf '== Creator Empire v1.4 Local Validation ==\n'
+printf '== Creator Empire v1.5 Local Validation ==\n'
 node --version
 npm --version
 python3 --version
@@ -44,7 +44,7 @@ if [[ "$BROWSER" == "1" ]]; then
   curl -fsS http://127.0.0.1:4173/api/storage >/dev/null
   printf '\n[Browser regression] v1.3 data/recovery contracts\n'
   python3 tests/browser-v1.3.py
-  printf '\n[Browser acceptance] v1.4 frozen Editorial Creator OS\n'
+  printf '\n[Browser acceptance] v1.4 Expert compatibility shell\n'
   python3 tests/browser-v1.4.py
   kill "$pid" 2>/dev/null || true
   trap - EXIT
