@@ -82,7 +82,7 @@
 /* v1.4.5 readability, accessibility and responsive QA corrections. */
 body { font-size:15px; line-height:1.6; }
 .side-rail .nav-dot { min-height:48px!important; font:600 15px/1.2 var(--font-body)!important; }
-.side-rail .nav-label { font-size:15px!important; letter-spacing:-.01em; }
+.side-rail .nav-label { flex:1 1 auto; min-width:0; max-width:none!important; overflow:visible!important; text-overflow:clip!important; font-size:15px!important; letter-spacing:-.01em; }
 .side-ai-copy strong { font-size:13px!important; }
 .side-ai-copy small { font-size:11px!important; }
 .page-header p { font-size:14px!important; }

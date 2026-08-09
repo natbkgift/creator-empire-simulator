@@ -86,6 +86,10 @@ def main() -> None:
             .first.evaluate("el => parseFloat(getComputedStyle(el).fontSize)")
         )
         record("Sidebar navigation typography is readable", nav_font_size >= 15, f"{nav_font_size:g}px")
+        clipped_nav_labels = page.locator(".side-rail .nav-label").evaluate_all(
+            "els => els.filter((el) => el.scrollWidth > el.clientWidth + 0.5).map((el) => el.textContent.trim())"
+        )
+        record("Sidebar navigation labels are not truncated", not clipped_nav_labels, str(clipped_nav_labels))
         record("Today remains mission-first", page.locator(".mission-deck").count() == 1 and page.locator(".mission-title").count() == 1)
         bg = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()")
         record("Editorial Dark token is active", bg.lower() == "#080c14", bg)
