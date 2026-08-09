@@ -179,6 +179,7 @@ def ensure_db() -> None:
           kind text not null,
           prompt_type text not null,
           model_tier text not null,
+          model_name text,
           status text not null,
           attempts integer not null default 0,
           input_json text,
@@ -193,6 +194,7 @@ def ensure_db() -> None:
           unique(job_id, step_index)
         )
         """)
+        ensure_column(conn, "autopilot_steps", "model_name", "text")
         conn.execute("""
         create table if not exists youtube_connections (
           id text primary key,
@@ -978,9 +980,9 @@ def _autopilot_prompt(kind: str, request_payload: dict[str, Any], results: dict[
 
 def _step_dict(row: tuple[Any, ...]) -> dict[str, Any]:
     return {
-        "index": int(row[0]), "kind": row[1], "promptType": row[2], "modelTier": row[3], "status": row[4],
-        "attempts": int(row[5]), "inputTokens": int(row[6]), "outputTokens": int(row[7]),
-        "searchQueries": int(row[8]), "estimatedCostUsd": round(float(row[9]), 6), "error": row[10],
+        "index": int(row[0]), "kind": row[1], "promptType": row[2], "modelTier": row[3], "model": row[4], "status": row[5],
+        "attempts": int(row[6]), "inputTokens": int(row[7]), "outputTokens": int(row[8]),
+        "searchQueries": int(row[9]), "estimatedCostUsd": round(float(row[10]), 6), "error": row[11],
     }
 
 
@@ -993,7 +995,7 @@ def _job_payload(job_id: str) -> dict[str, Any]:
         if not row:
             raise KeyError("Autopilot job not found")
         step_rows = conn.execute(
-            "select step_index,kind,prompt_type,model_tier,status,attempts,input_tokens,output_tokens,search_queries,estimated_cost_usd,error "
+            "select step_index,kind,prompt_type,model_tier,model_name,status,attempts,input_tokens,output_tokens,search_queries,estimated_cost_usd,error "
             "from autopilot_steps where job_id=? order by step_index", (job_id,)
         ).fetchall()
     return {
@@ -1159,8 +1161,8 @@ def process_autopilot_job(job_id: str) -> None:
             results[kind] = output
             with db_conn() as conn:
                 conn.execute(
-                    "update autopilot_steps set status='completed',output_json=?,input_tokens=?,output_tokens=?,search_queries=?,estimated_cost_usd=?,error=null,completed_at=? where job_id=? and step_index=?",
-                    (canonical_json(output), int(response.get("inputTokens") or 0), int(response.get("outputTokens") or 0), int(response.get("searchQueries") or 0), float(response.get("estimatedCostUsd") or 0), now_iso(), job_id, index),
+                    "update autopilot_steps set status='completed',model_name=?,output_json=?,input_tokens=?,output_tokens=?,search_queries=?,estimated_cost_usd=?,error=null,completed_at=? where job_id=? and step_index=?",
+                    (str(response.get("model") or "")[:120] or None, canonical_json(output), int(response.get("inputTokens") or 0), int(response.get("outputTokens") or 0), int(response.get("searchQueries") or 0), float(response.get("estimatedCostUsd") or 0), now_iso(), job_id, index),
                 )
         except Exception as exc:  # noqa: BLE001
             last_error = str(exc)[:300]

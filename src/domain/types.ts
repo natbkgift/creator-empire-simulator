@@ -74,7 +74,7 @@ export interface AutopilotRequest {
 
 export interface AutopilotStep {
   index: number; kind: AutopilotStepKind; status: 'pending' | 'running' | 'completed' | 'failed';
-  modelTier: 'luna' | 'terra'; attempts: number; inputTokens: number; outputTokens: number;
+  modelTier: 'luna' | 'terra'; model?: string; attempts: number; inputTokens: number; outputTokens: number;
   searchQueries: number; estimatedCostUsd: number; error?: string;
 }
 

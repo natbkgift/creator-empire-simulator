@@ -70,7 +70,9 @@ def main() -> None:
         assert_true("youtube_connections" in tables and "video_assets" in tables and "youtube_uploads" in tables, "YouTube integration tables missing")
         with server.db_conn() as conn:
             upload_columns = server.column_names(conn, "youtube_uploads")
+            step_columns = server.column_names(conn, "autopilot_steps")
         assert_true("job_id" in upload_columns, "YouTube uploads must be scoped to an Autopilot job")
+        assert_true("model_name" in step_columns, "Autopilot steps must retain the exact model name")
         assert_true("ai_secrets" not in tables, "plaintext ai_secrets table must not exist")
         assert_true(legacy_secret.encode() not in server.DB_PATH.read_bytes(), "legacy plaintext key remains recoverable in SQLite file")
         print("PASS legacy plaintext secret table and bytes are securely purged")
@@ -166,6 +168,7 @@ def main() -> None:
             job = server.get_autopilot_job(created["job"]["id"])["job"]
             assert_true(job["status"] == "review_ready" and len(job["steps"]) == 5, "autopilot did not reach one-review gate")
             assert_true(job["package"]["modelUsage"]["lunaCalls"] == 4 and job["package"]["modelUsage"]["terraCalls"] == 1, "autopilot model ratio is not 80/20")
+            assert_true(all(step["model"] == "mock" for step in job["steps"]), "Autopilot step ledger did not retain the exact model")
             assert_true(job["package"]["script"]["narration"].startswith("A verified"), "Terra revised script was not retained")
             server.approve_autopilot_job(job["id"])
             server.approve_autopilot_job(job["id"])
