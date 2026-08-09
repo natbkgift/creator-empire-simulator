@@ -198,6 +198,34 @@ def main() -> None:
         assert_true('Content-Range' in youtube_source and "status='uploaded'" in youtube_source, "resumable YouTube upload contract missing")
         assert_true('"privacyStatus": "private"' in inspect.getsource(server._initiate_youtube_session), "YouTube uploads must be private")
         assert_true(server.YOUTUBE_UPLOAD_SCOPE == "https://www.googleapis.com/auth/youtube.upload", "YouTube OAuth scope is broader than upload-only")
+        session_attempts = 0
+
+        class FakeYoutubeSession:
+            headers = {"Location": "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=qa"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        def flaky_youtube_session(*_args, **_kwargs):
+            nonlocal session_attempts
+            session_attempts += 1
+            if session_attempts == 1:
+                raise server.urllib.error.HTTPError("https://www.googleapis.com/upload/youtube/v3/videos", 500, "backendError", {}, io.BytesIO(b"{}"))
+            return FakeYoutubeSession()
+
+        original_urlopen = server.urllib.request.urlopen
+        original_sleep = server.time.sleep
+        server.urllib.request.urlopen = flaky_youtube_session
+        server.time.sleep = lambda *_args: None
+        try:
+            session_uri = server._initiate_youtube_session("token", {"title": "QA", "description": "", "tags": [], "categoryId": "22", "containsSyntheticMedia": True}, 4)
+            assert_true(session_attempts == 2 and session_uri.endswith("upload_id=qa"), "YouTube session initiation did not recover from a transient 5xx")
+        finally:
+            server.urllib.request.urlopen = original_urlopen
+            server.time.sleep = original_sleep
         print("PASS YouTube OAuth state, encrypted token storage, upload-only scope and private resumable upload contract")
 
         previous_upload_dir = server.VIDEO_UPLOAD_DIR

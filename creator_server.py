@@ -1470,19 +1470,30 @@ def _initiate_youtube_session(access_token: str, metadata: dict[str, Any], size:
         "snippet": {"title": metadata["title"], "description": metadata["description"], "tags": metadata["tags"], "categoryId": metadata["categoryId"], "defaultLanguage": "th"},
         "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False, "containsSyntheticMedia": metadata["containsSyntheticMedia"]},
     }, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(
-        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
-        data=body, method="POST", headers={
-            "Authorization": f"Bearer {access_token}", "Content-Type": "application/json; charset=UTF-8",
-            "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": "video/mp4",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            location = response.headers.get("Location", "")
-    except urllib.error.HTTPError as exc:
-        exc.read()
-        raise RuntimeError(f"YouTube upload session rejected with HTTP {exc.code}") from exc
+    location = ""
+    for attempt in range(3):
+        request = urllib.request.Request(
+            "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+            data=body, method="POST", headers={
+                "Authorization": f"Bearer {access_token}", "Content-Type": "application/json; charset=UTF-8",
+                "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": "video/mp4",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                location = response.headers.get("Location", "")
+            break
+        except urllib.error.HTTPError as exc:
+            exc.read()
+            if exc.code in {429, 500, 502, 503, 504} and attempt < 2:
+                time.sleep(2**attempt)
+                continue
+            raise RuntimeError(f"YouTube upload session rejected with HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            if attempt < 2:
+                time.sleep(2**attempt)
+                continue
+            raise RuntimeError("YouTube upload session could not be reached") from exc
     if not location.startswith("https://www.googleapis.com/"):
         raise RuntimeError("YouTube resumable upload session URI is missing")
     return location
