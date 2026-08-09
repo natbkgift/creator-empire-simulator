@@ -1,0 +1,33 @@
+[Unit]
+Description=Creator Empire Simulator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=creator-empire
+Group=creator-empire
+WorkingDirectory=/opt/creator-empire/current
+EnvironmentFile=/etc/creator-empire/creator-empire.env
+Environment=HOME=/var/lib/creator-empire
+ExecStart=/var/lib/creator-empire/venv/bin/python /opt/creator-empire/current/creator_server.py --root /opt/creator-empire/current/dist --host 127.0.0.1 --port 8417
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+ReadWritePaths=/var/lib/creator-empire
+
+[Install]
+WantedBy=multi-user.target
