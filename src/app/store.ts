@@ -29,7 +29,15 @@ export const initializeStore = async (): Promise<Workspace> => {
   const stored = await loadWorkspaceRecord();
   workspace = migrateWorkspace(stored ?? createSeedWorkspace());
   loaded = true;
-  if (!stored) queueSave();
+  const storedSettings = stored?.settings;
+  const needsSchemaFiveSave = !stored
+    || stored.schemaVersion !== 5
+    || storedSettings?.openAiInputUsdPer1M === undefined
+    || storedSettings?.openAiOutputUsdPer1M === undefined
+    || storedSettings?.openAiAdvancedInputUsdPer1M === undefined
+    || storedSettings?.openAiAdvancedOutputUsdPer1M === undefined
+    || storedSettings?.experienceMode === undefined;
+  if (needsSchemaFiveSave) queueSave();
   return workspace;
 };
 

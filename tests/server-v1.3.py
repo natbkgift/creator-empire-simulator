@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic server/data-safety tests for Creator Empire v1.3."""
+"""Deterministic server/data-safety regression tests for Creator Empire v1.5."""
 from __future__ import annotations
 
 import inspect
+import io
 import json
 import os
 import sqlite3
@@ -22,7 +23,7 @@ def assert_true(value: bool, message: str) -> None:
 
 def workspace(name: str, revision: int = 0) -> dict:
     return {
-        "schemaVersion": 4,
+        "schemaVersion": 5,
         "revision": revision,
         "id": "default",
         "name": name,
@@ -65,6 +66,8 @@ def main() -> None:
         assert_true("workspace" in tables, "workspace table missing")
         assert_true("workspace_history" in tables, "workspace_history table missing")
         assert_true("ai_runs" in tables, "ai_runs table missing")
+        assert_true("autopilot_jobs" in tables and "autopilot_steps" in tables, "autopilot job tables missing")
+        assert_true("youtube_connections" in tables and "video_assets" in tables and "youtube_uploads" in tables, "YouTube integration tables missing")
         assert_true("ai_secrets" not in tables, "plaintext ai_secrets table must not exist")
         assert_true(legacy_secret.encode() not in server.DB_PATH.read_bytes(), "legacy plaintext key remains recoverable in SQLite file")
         print("PASS legacy plaintext secret table and bytes are securely purged")
@@ -122,6 +125,111 @@ def main() -> None:
         assert_true(ledger["runs"] and ledger["runs"][0]["ok"], "AI run ledger did not persist successful mock run")
         print("PASS mocked AI run records tokens and estimated cost")
 
+        fake_results = {
+            "topic-research": {"summary": "Grounded topic research", "sources": [{"title": "Primary source", "url": "https://example.com/source", "publisher": "Example", "claimType": "documented", "notes": "Evidence"}], "verifiedFacts": ["Verified"], "disputedClaims": [], "nextAction": "Plan"},
+            "autopilot-plan": {"title": "One idea to a finished Short", "angle": "Show the simplest path", "hook": "One click can remove five confusing steps", "contentPlan": ["Problem", "Proof", "Action"]},
+            "shorts-script": {"title": "One idea to a finished Short", "hook": "One click can remove five confusing steps", "script": "A complete test narration.", "durationSeconds": 30, "factCaveats": [], "nextAction": "Verify"},
+            "fact-check": {"safeSummary": "Claims verified", "claims": [], "blockingIssues": [], "sources": [{"title": "Primary source", "url": "https://example.com/source", "publisher": "Example", "claimType": "documented", "notes": "Evidence"}], "revisedScript": "A verified complete test narration."},
+            "autopilot-package": {"description": "Ready to upload", "tags": ["creator"], "thumbnailText": "ONE CLICK", "storyboard": ["Scene 1"], "assetPrompts": ["Clean studio visual"], "capcutBrief": "Edit in 9:16", "canvaBrief": "High contrast thumbnail", "repurposingPlan": "Reuse as a post", "captionsSrt": "1\n00:00:00,000 --> 00:00:03,000\nA verified complete test narration.", "syntheticMediaDisclosure": "Disclose realistic synthetic media."},
+        }
+        original_generate = server.ai_generate
+        def fake_ungrounded_generate(payload):
+            prompt_type = payload["promptType"]
+            return {
+                "ok": True, "text": json.dumps(fake_results[prompt_type]),
+                "modelTier": "terra" if prompt_type == "fact-check" else "luna",
+                "model": "mock", "inputTokens": 100, "outputTokens": 50,
+                "searchQueries": 0, "estimatedCostUsd": 0.001,
+            }
+        server.ai_generate = fake_ungrounded_generate
+        ungrounded = server.create_autopilot_job({"topic": "Grounding gate", "format": "shorts", "durationSeconds": 30, "language": "th"})
+        server.process_autopilot_job(ungrounded["job"]["id"])
+        blocked_job = server.get_autopilot_job(ungrounded["job"]["id"])["job"]
+        assert_true(blocked_job["status"] == "needs_attention" and blocked_job["steps"][0]["status"] == "failed", "Autopilot must fail closed without research search evidence")
+
+        def fake_autopilot_generate(payload):
+            prompt_type = payload["promptType"]
+            return {
+                "ok": True, "text": json.dumps(fake_results[prompt_type]),
+                "modelTier": "terra" if prompt_type == "fact-check" else "luna",
+                "model": "mock", "inputTokens": 100, "outputTokens": 50,
+                "searchQueries": 1 if prompt_type in {"topic-research", "fact-check"} else 0,
+                "estimatedCostUsd": 0.001,
+            }
+        server.ai_generate = fake_autopilot_generate
+        try:
+            created = server.create_autopilot_job({"topic": "Creator workflow", "format": "shorts", "durationSeconds": 30, "language": "th", "channel": {"key": "business", "name": "FlowBiz", "niche": "business", "promise": "Useful in one minute", "aiFitScore": 94}})
+            server.process_autopilot_job(created["job"]["id"])
+            job = server.get_autopilot_job(created["job"]["id"])["job"]
+            assert_true(job["status"] == "review_ready" and len(job["steps"]) == 5, "autopilot did not reach one-review gate")
+            assert_true(job["package"]["modelUsage"]["lunaCalls"] == 4 and job["package"]["modelUsage"]["terraCalls"] == 1, "autopilot model ratio is not 80/20")
+            assert_true(job["package"]["script"]["narration"].startswith("A verified"), "Terra revised script was not retained")
+            server.approve_autopilot_job(job["id"])
+            server.approve_autopilot_job(job["id"])
+            archive = server.autopilot_package_zip(job["id"])
+            assert_true(len(archive) > 200 and archive[:2] == b"PK", "handoff package is not a ZIP archive")
+            with server.db_conn() as conn:
+                conn.execute("update autopilot_jobs set status='running' where id=?", (ungrounded["job"]["id"],))
+            server.recover_interrupted_jobs()
+            assert_true(server.get_autopilot_job(ungrounded["job"]["id"])["job"]["status"] == "queued", "interrupted Autopilot job was not requeued")
+        finally:
+            server.ai_generate = original_generate
+        print("PASS Autopilot grounds research, resumes after restart, stays approval-idempotent and reaches exact 80/20")
+
+        from cryptography.fernet import Fernet
+        previous_token_key = os.environ.get("CREATOR_EMPIRE_TOKEN_KEY")
+        os.environ["CREATOR_EMPIRE_TOKEN_KEY"] = Fernet.generate_key().decode("ascii")
+        try:
+            encrypted = server.encrypt_secret('{"refresh_token":"test-refresh-token"}')
+            assert_true("test-refresh-token" not in encrypted, "OAuth refresh token remained plaintext")
+            assert_true("test-refresh-token" in server.decrypt_secret(encrypted), "encrypted OAuth token could not be recovered")
+            invalid_state = False
+            try:
+                server.complete_youtube_oauth("code", "missing-state")
+            except PermissionError:
+                invalid_state = True
+            assert_true(invalid_state, "OAuth callback accepted an invalid CSRF state")
+        finally:
+            if previous_token_key is None:
+                os.environ.pop("CREATOR_EMPIRE_TOKEN_KEY", None)
+            else:
+                os.environ["CREATOR_EMPIRE_TOKEN_KEY"] = previous_token_key
+        youtube_source = inspect.getsource(server.process_youtube_upload)
+        assert_true('Content-Range' in youtube_source and "status='uploaded'" in youtube_source, "resumable YouTube upload contract missing")
+        assert_true('"privacyStatus": "private"' in inspect.getsource(server._initiate_youtube_session), "YouTube uploads must be private")
+        assert_true(server.YOUTUBE_UPLOAD_SCOPE == "https://www.googleapis.com/auth/youtube.upload", "YouTube OAuth scope is broader than upload-only")
+        print("PASS YouTube OAuth state, encrypted token storage, upload-only scope and private resumable upload contract")
+
+        previous_upload_dir = server.VIDEO_UPLOAD_DIR
+        server.VIDEO_UPLOAD_DIR = Path(temp) / "video-assets"
+        try:
+            class FakeUpload:
+                headers = {
+                    "Content-Length": "4", "Content-Type": "video/mp4",
+                    "X-Filename": "..%2F..%2Fescape.mp4", "X-Project-Id": "qa-project",
+                }
+                rfile = io.BytesIO(b"test")
+
+            asset = server.receive_video_asset(FakeUpload())
+            with server.db_conn() as conn:
+                stored = conn.execute("select filename,stored_path,size_bytes from video_assets where id=?", (asset["asset"]["id"],)).fetchone()
+            assert_true(stored[0] == "escape.mp4" and Path(stored[1]).parent == server.VIDEO_UPLOAD_DIR.resolve(), "video filename traversal escaped upload storage")
+            assert_true(stored[2] == 4, "streamed video size ledger mismatch")
+
+            class OversizeUpload:
+                headers = {"Content-Length": str(server.MAX_VIDEO_BYTES + 1), "Content-Type": "video/mp4", "X-Filename": "large.mp4"}
+                rfile = io.BytesIO()
+
+            rejected = False
+            try:
+                server.receive_video_asset(OversizeUpload())
+            except ValueError as exc:
+                rejected = "upload limit" in str(exc).lower()
+            assert_true(rejected, "video upload limit was not enforced before streaming")
+        finally:
+            server.VIDEO_UPLOAD_DIR = previous_upload_dir
+        print("PASS MP4 streaming sanitizes paths and enforces the 2 GiB default limit")
+
         source = inspect.getsource(server.call_openai)
         assert_true('"store": False' in source, "OpenAI Responses call must set store=false")
         assert_true('"max_output_tokens": max_output_tokens' in source, "OpenAI output bound missing")
@@ -129,7 +237,8 @@ def main() -> None:
         assert_true('request_payload["tools"] = [{"type": "web_search"}]' in source, "OpenAI research grounding tool missing")
         assert_true('request_payload["tool_choice"] = "required"' in source, "OpenAI research grounding must be mandatory")
         post_source = inspect.getsource(server.post_json)
-        assert_true("attempts: int = 4" in post_source and "Retry-After" in post_source and "time.sleep" in post_source, "retry/backoff contract missing")
+        assert_true("attempts: int = 3" in post_source and "Retry-After" in post_source and "time.sleep" in post_source, "retry/backoff contract must cap automatic retries at two")
+        assert_true("for response_attempt in range(2)" in source and "RELIABILITY REPAIR" in source, "one structured JSON repair is required")
         assert_true("provider response bodies" in post_source.lower(), "provider error-body redaction contract missing")
         luna_route = server.route_openai_model(workspace("router")["settings"], "hook-generator")
         terra_route = server.route_openai_model(workspace("router")["settings"], "fact-check")
@@ -148,7 +257,7 @@ def main() -> None:
         gemini_source = inspect.getsource(server.call_gemini)
         assert_true('generation_config["responseSchema"] = schema' in gemini_source, "Gemini structured JSON schema mode missing")
         assert_true('request_payload["tools"] = [{"google_search": {}}]' in gemini_source, "Gemini research grounding tool missing")
-        assert_true(len(server.SUPPORTED_PROMPT_TYPES) == 16, "AI workflow capability inventory must cover 16 prompt types")
+        assert_true(len(server.SUPPORTED_PROMPT_TYPES) == 18 and {"autopilot-plan", "autopilot-package"}.issubset(server.SUPPORTED_PROMPT_TYPES), "AI capability inventory must keep 16 Expert prompts plus two internal Autopilot contracts")
         rejected_prompt_type = False
         try:
             server.ai_generate({"provider": "openai", "model": "mock-openai", "prompt": "test", "promptType": "unknown"})
@@ -196,7 +305,7 @@ def main() -> None:
         import gc
         gc.collect()
 
-    print("\n10/10 server/data-safety checks passed.")
+    print("\n13/13 server/data-safety checks passed.")
 
 
 if __name__ == "__main__":

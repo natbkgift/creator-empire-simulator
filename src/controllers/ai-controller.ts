@@ -113,6 +113,8 @@ export const parseAndApplyPromptResponse = (): void => {
       target.factCheckSummary = appendSection(target.factCheckSummary, 'Claims', readableList(parsed.claims));
       target.factCheckSummary = appendSection(target.factCheckSummary, 'Blocking issues', readableList(parsed.blockingIssues));
       if (target.factCheckSummary) changed.push('fact-check');
+      const revisedScript = firstString(parsed.revisedScript);
+      if (revisedScript) { target.script = revisedScript; target.scriptVersion += 1; changed.push('verified script'); }
       attachSources(parsed.sources);
     }
     if (typeof parsed.hook === 'string' && parsed.hook.trim()) { target.hook = parsed.hook.trim(); changed.push('hook'); }

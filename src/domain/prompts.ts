@@ -95,7 +95,7 @@ const outputSchema = (type: PromptType): string => {
     return `Return valid JSON only:\n{"hooks":[{"text":"...","pattern":"curiosity|contradiction|stakes|visual-surprise","whyItWorks":"..."}],"recommendedIndex":0}`;
   }
   if (type === 'fact-check') {
-    return `Return valid JSON only:\n{"claims":[{"claim":"...","status":"documented|reported|disputed|unsupported","evidence":"...","caveat":"..."}],"blockingIssues":[],"safeSummary":"...","sources":[{"title":"...","url":"...","publisher":"...","claimType":"documented|reported|disputed|context","notes":"..."}]}`;
+    return `Return valid JSON only:\n{"claims":[{"claim":"...","status":"documented|reported|disputed|unsupported","evidence":"...","caveat":"..."}],"blockingIssues":[],"safeSummary":"...","sources":[{"title":"...","url":"...","publisher":"...","claimType":"documented|reported|disputed|context","notes":"..."}],"revisedScript":"Return the corrected script when a draft exists, otherwise an empty string."}`;
   }
   if (type === 'competitor-pattern') {
     return `Return valid JSON only:\n{"summary":"...","sources":[{"title":"...","url":"...","publisher":"...","claimType":"documented|reported|disputed|context","notes":"..."}],"patterns":[{"pattern":"...","evidence":"...","application":"..."}],"doNotCopy":["..."],"transformedPrinciples":["..."],"nextAction":"..."}`;

@@ -84,10 +84,12 @@ test('CapCut mode keeps factual content controlled and product content Director-
   assert.equal(recommendCapCutMode(historyIdea, { ...workspace.projects[0], title: 'Property Project Advertisement' }).mode, 'director');
 });
 
-test('validation accepts legacy input then migrates it to schema v4', () => {
+test('validation accepts legacy input then migrates it to schema v5 with Simple Mode compatibility', () => {
   const legacy = createSeedWorkspace(); assert.equal(validateWorkspace(legacy).valid, true);
-  const migrated = migrateWorkspace(legacy); assert.equal(migrated.schemaVersion, 4); assert.equal(migrated.revision, 0);
+  const migrated = migrateWorkspace(legacy); assert.equal(migrated.schemaVersion, 5); assert.equal(migrated.revision, 0);
   assert.ok(migrated.projects.every((project) => project.publishAt));
+  assert.ok(migrated.projects.every((project) => project.autopilotPackage === undefined));
+  assert.equal(migrated.settings.experienceMode, 'simple');
   assert.ok(migrated.settings.aiMaxOutputTokens > 0); assert.ok(migrated.settings.defaultPublishTime);
   assert.equal(validateWorkspace(migrated).valid, true); assert.equal(validateWorkspace({}).valid, false);
 });

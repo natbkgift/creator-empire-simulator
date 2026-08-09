@@ -44,7 +44,7 @@ const migrateTask = (task: Partial<CalendarTask>): CalendarTask => ({
 
 export const migrateWorkspace = (input: Workspace | Record<string, unknown>): Workspace => {
   const source = structuredClone(input) as unknown as Workspace & { schemaVersion?: number; revision?: number };
-  source.schemaVersion = 4;
+  source.schemaVersion = 5;
   source.revision = Math.max(0, Number(source.revision ?? 0));
   source.projects = Array.isArray(source.projects) ? source.projects.map(migrateProject) : [];
   source.calendarTasks = Array.isArray(source.calendarTasks) ? source.calendarTasks.map(migrateTask) : [];
@@ -81,6 +81,8 @@ export const migrateWorkspace = (input: Workspace | Record<string, unknown>): Wo
     workdayStart: source.settings?.workdayStart ?? '09:00',
     workdayEnd: source.settings?.workdayEnd ?? '18:00',
     defaultPublishTime: source.settings?.defaultPublishTime ?? '19:00',
+    experienceMode: source.settings?.experienceMode ?? 'simple',
+    simpleBetaEnabled: source.settings?.simpleBetaEnabled ?? true,
   };
   source.calendarTasks = source.calendarTasks.map((task) => {
     const project = source.projects.find((candidate) => candidate.id === task.projectId);

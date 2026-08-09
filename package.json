@@ -1,9 +1,9 @@
 {
   "name": "creator-empire-simulator",
-  "version": "1.4.6",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
-  "description": "Editorial Creator OS with SQLite reliability, capacity-aware production planning, Channel Workspace strategy, and AI Assisted guardrails",
+  "description": "One-click Creator Autopilot with Light Studio Simple Mode, persistent AI jobs, Expert compatibility, and private YouTube handoff",
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",

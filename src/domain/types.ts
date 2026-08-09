@@ -61,6 +61,45 @@ export interface WorkflowEvent {
   note: string; fromStatus?: ProjectStatus; toStatus?: ProjectStatus; promptType?: PromptType; taskId?: string;
 }
 
+export type AutopilotJobStatus = 'queued' | 'running' | 'review_ready' | 'approved' | 'needs_attention' | 'cancelled';
+export type AutopilotStepKind = 'research' | 'content-plan' | 'script' | 'fact-check' | 'production-pack';
+
+export interface AutopilotRequest {
+  topic: string;
+  format: Exclude<VideoFormat, 'both'>;
+  durationSeconds: number;
+  language: Language;
+  channel: { key: string; name: string; niche: string; promise: string; aiFitScore: number };
+}
+
+export interface AutopilotStep {
+  index: number; kind: AutopilotStepKind; status: 'pending' | 'running' | 'completed' | 'failed';
+  modelTier: 'luna' | 'terra'; attempts: number; inputTokens: number; outputTokens: number;
+  searchQueries: number; estimatedCostUsd: number; error?: string;
+}
+
+export interface AutopilotPackage {
+  research: { summary: string; sources: Array<{ title: string; url: string; publisher: string; notes: string }>; risks: string[] };
+  channel: { key: string; name: string; niche: string; promise: string; aiFitScore: number };
+  contentPlan: { title: string; angle: string; hook: string; durationSeconds: number; language: Language };
+  script: { narration: string; factCheckSummary: string; factCaveats: string[] };
+  metadata: { title: string; description: string; tags: string[]; thumbnailText: string; syntheticMediaDisclosure: string };
+  handoff: { storyboard: string[]; assetPrompts: string[]; capcutBrief: string; canvaBrief: string; repurposingPlan: string; captionsSrt: string };
+  modelUsage: { lunaCalls: number; terraCalls: number; lunaPercent: number; terraPercent: number; estimatedCostUsd: number };
+  generatedAt: string;
+}
+
+export interface AutopilotJob {
+  id: string; status: AutopilotJobStatus; stage: AutopilotStepKind | 'ready'; progress: number;
+  request: AutopilotRequest; steps: AutopilotStep[]; package?: AutopilotPackage; error?: string;
+  createdAt: string; updatedAt: string; approvedAt?: string;
+}
+
+export interface VideoAsset {
+  id: string; projectId?: string; filename: string; contentType: string; sizeBytes: number; sha256: string;
+  status: 'ready' | 'uploading' | 'uploaded' | 'expired'; createdAt: string; expiresAt: string;
+}
+
 export interface VideoProject {
   id: string; title: string; channelId: string; ideaId: string; series: string; language: Language; platforms: string[];
   format: Exclude<VideoFormat, 'both'>; targetDurationSeconds: number; deadline: string;
@@ -72,6 +111,7 @@ export interface VideoProject {
   storyboard: string[]; assetPrompts: string[]; capcutBrief: string; promptVersions: string[]; thumbnailVersions: string[];
   publicationLinks: string[]; lessonsLearned: string; analyticsPostmortem: string; repurposingPlan: string;
   workflowEvents: WorkflowEvent[]; policyChecks: Record<string, boolean>; riskLevel: RiskLevel; createdAt: string; updatedAt: string; isDemo?: boolean;
+  autopilotJobId?: string; autopilotPackage?: AutopilotPackage;
 }
 
 export type PromptType =
@@ -143,12 +183,13 @@ export interface Settings {
   aiMaxOutputTokens?: number; aiRequestTimeoutSeconds?: number; aiDailyBudgetUsd?: number; aiMonthlyBudgetUsd?: number;
   openAiInputUsdPer1M?: number; openAiOutputUsdPer1M?: number; openAiAdvancedInputUsdPer1M?: number; openAiAdvancedOutputUsdPer1M?: number; openAiSearchUsdPerQuery?: number; geminiInputUsdPer1M?: number; geminiOutputUsdPer1M?: number; geminiSearchUsdPerQuery?: number;
   workdayStart?: string; workdayEnd?: string; defaultPublishTime?: string;
+  experienceMode?: 'simple' | 'expert'; simpleBetaEnabled?: boolean;
 }
 
 export interface FocusState { mode: FocusMode; activeChannelId?: string; activeProjectId?: string; activeTaskId?: string; updatedAt: string; }
 
 export interface Workspace {
-  schemaVersion: 1 | 2 | 3 | 4;
+  schemaVersion: 1 | 2 | 3 | 4 | 5;
   revision?: number;
   id: 'default'; name: string; createdAt: string; updatedAt: string; ideas: Idea[]; channels: Channel[]; projects: VideoProject[];
   sources: SourceRecord[]; prompts: PromptTemplate[]; calendarTasks: CalendarTask[]; credits: CreditEntry[]; analytics: AnalyticsEntry[];

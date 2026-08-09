@@ -12,7 +12,7 @@ export interface ValidationResult {
 export const validateWorkspace = (input: unknown): ValidationResult => {
   const errors: string[] = [];
   if (!isRecord(input)) return { valid: false, errors: ['Workspace must be a JSON object.'] };
-  if (![1, 2, 3, 4].includes(Number(input.schemaVersion))) errors.push('Unsupported schemaVersion. Expected 1, 2, 3 or 4.');
+  if (![1, 2, 3, 4, 5].includes(Number(input.schemaVersion))) errors.push('Unsupported schemaVersion. Expected 1, 2, 3, 4 or 5.');
   if (input.id !== 'default') errors.push('Workspace id must be "default".');
   const arrayFields = [
     'ideas', 'channels', 'projects', 'sources', 'prompts', 'calendarTasks', 'credits', 'analytics',
