@@ -3,7 +3,7 @@ import { requestRender } from './runtime.js';
 export type RouteId =
   | 'onboarding' | 'hq' | 'mission' | 'map' | 'ideas' | 'blueprint' | 'production' | 'pipeline'
   | 'prompts' | 'capcut' | 'calendar' | 'simulator' | 'analytics' | 'monetization'
-  | 'policy' | 'settings' | 'import-export';
+  | 'policy' | 'settings' | 'import-export' | 'beta/create' | 'simple/channels' | 'simple/projects';
 
 export interface RouteState {
   name: string;

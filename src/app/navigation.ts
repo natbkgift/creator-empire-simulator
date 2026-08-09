@@ -29,6 +29,9 @@ const contextualRouteTitles: Record<string, string> = {
   'import-export': 'Backup & Recovery',
   settings: 'Settings',
   onboarding: 'Setup',
+  'beta/create': 'สร้างวิดีโอ',
+  'simple/channels': 'ช่องของฉัน',
+  'simple/projects': 'ผลงาน',
 };
 
 export const routeTitle = (route: string): string =>

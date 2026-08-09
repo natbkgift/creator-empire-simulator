@@ -26,6 +26,8 @@ import { renderAnalytics } from '../dist/src/features/analytics.js';
 import { renderPrompts } from '../dist/src/features/prompts.js';
 import { renderSettings } from '../dist/src/features/settings.js';
 import { routeTitle } from '../dist/src/app/navigation.js';
+import { renderSimpleShell } from '../dist/src/app/simple-shell.js';
+import { renderSimpleCreate, renderSimpleChannels, renderSimpleProjects } from '../dist/src/features/simple.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -180,6 +182,19 @@ test('Settings exposes a non-destructive first-time setup replay', () => {
   assert.ok(settings.includes('Run setup again'));
   assert.ok(settings.includes('data-action="restart-onboarding"'));
   assert.ok(settings.includes('ไม่ลบ Channel, Video, Calendar หรือ Analytics'));
+});
+
+test('Light Studio Simple Mode exposes one primary Autopilot action and four clear destinations', () => {
+  const workspace = createSeedWorkspace();
+  const createView = renderSimpleCreate(workspace);
+  const html = renderSimpleShell(workspace, 'beta/create', createView.html);
+  assert.ok(html.includes('มาจากไอเดียเดียว สู่คลิปพร้อมอัปโหลด'));
+  assert.ok(html.includes('สร้างชุดวิดีโอทั้งหมด'));
+  assert.equal((html.match(/class="simple-nav-link /g) ?? []).length, 4);
+  assert.equal((html.match(/class="channel-choice /g) ?? []).length, 3);
+  ['สร้างวิดีโอ', 'ช่องของฉัน', 'ผลงาน', 'Expert'].forEach((label) => assert.ok(html.includes(label)));
+  assert.ok(renderSimpleChannels(workspace).html.includes('ช่องของฉัน'));
+  assert.ok(renderSimpleProjects(workspace).html.includes('ผลงาน'));
 });
 
 let passed = 0;

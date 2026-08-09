@@ -5,6 +5,7 @@ import { initializeStore, getWorkspace, subscribe, updateWorkspace, replaceWorks
 import { parseRoute, navigate } from './app/router.js';
 import { registerRenderer } from './app/runtime.js';
 import { renderShell } from './app/shell.js';
+import { renderSimpleShell } from './app/simple-shell.js';
 import { routeTitle } from './app/navigation.js';
 import { escapeHtml, todayIso } from './domain/utils.js';
 import { createSeedWorkspace } from './seed/demo.js';
@@ -29,6 +30,7 @@ import { renderPolicy } from './features/policy.js';
 import { renderSettings } from './features/settings.js';
 import { renderImportExport } from './features/importExport.js';
 import { isOnboardingReplayActive, renderOnboarding, resetOnboardingFlow, restartOnboardingFlow } from './features/onboarding.js';
+import { renderSimpleCreate, renderSimpleChannels, renderSimpleProjects } from './features/simple.js';
 
 import { copyText, stringFrom } from './controllers/helpers.js';
 import { saveSettings } from './controllers/settings-controller.js';
@@ -42,6 +44,7 @@ const app = document.querySelector<HTMLElement>('#app');
 if (!app) throw new Error('App root #app was not found.');
 let rendering = false;
 const normalizeRoute = (route: string): string => route === 'pipeline' ? 'production' : route;
+const isSimpleRoute = (route: string): boolean => route === 'beta/create' || route.startsWith('simple/');
 
 const associateVisibleFieldLabels = (root: HTMLElement, route: string): void => {
   root.querySelectorAll<HTMLElement>('.field').forEach((field, index) => {
@@ -81,6 +84,9 @@ const getRouteView = (workspace: Workspace, route: string, params: URLSearchPara
     case 'policy': return { html: renderPolicy(workspace, params) };
     case 'settings': return { html: renderSettings(workspace) };
     case 'import-export': return { html: renderImportExport(workspace) };
+    case 'beta/create': return renderSimpleCreate(workspace);
+    case 'simple/channels': return renderSimpleChannels(workspace);
+    case 'simple/projects': return renderSimpleProjects(workspace);
     default: return { html: renderHq(workspace) };
   }
 };
@@ -95,13 +101,13 @@ const render = (): void => {
     const replayRequested = route === 'onboarding' && state.params.get('replay') === '1';
     if (replayRequested && !isOnboardingReplayActive()) restartOnboardingFlow();
     const replayingOnboarding = route === 'onboarding' && (replayRequested || isOnboardingReplayActive());
-    if (!workspace.settings.onboardingComplete && route !== 'onboarding') { navigate('onboarding'); return; }
+    if (!workspace.settings.onboardingComplete && route !== 'onboarding' && !isSimpleRoute(route)) { navigate('onboarding'); return; }
     if (workspace.settings.onboardingComplete && route === 'onboarding' && !replayingOnboarding) { navigate('hq'); return; }
     if (route !== 'onboarding') resetOnboardingFlow();
     document.documentElement.lang = workspace.settings.locale;
     document.body.classList.toggle('reduce-motion', workspace.settings.reducedMotion);
     const view = getRouteView(workspace, route, state.params);
-    app.innerHTML = route === 'onboarding' ? view.html : renderShell(workspace, route, view.html);
+    app.innerHTML = route === 'onboarding' ? view.html : isSimpleRoute(route) ? renderSimpleShell(workspace, route, view.html) : renderShell(workspace, route, view.html);
     associateVisibleFieldLabels(app, route);
     view.mount?.();
     document.body.dataset.route = route;
@@ -278,7 +284,7 @@ void initializeStore().then((workspace) => {
   if (!location.hash) location.hash = workspace.settings.onboardingComplete ? '#/hq' : '#/onboarding';
   else render();
   if ('serviceWorker' in navigator) {
-    const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.4.6', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };
+    const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.5.0', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };
     if (document.readyState === 'complete') registerServiceWorker(); else window.addEventListener('load', registerServiceWorker, { once: true });
   }
 }).catch((error) => {
