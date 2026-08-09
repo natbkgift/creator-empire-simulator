@@ -12,7 +12,7 @@ const channelChoices = (): string => simpleChannelRecommendations.map((channel, 
   <span class="channel-choice-icon tone-${index + 1}">${icon(channel.iconName)}</span>
   <span class="channel-choice-copy"><strong>${escapeHtml(channel.name)}</strong><small>${escapeHtml(channel.niche)}</small></span>
   <span class="channel-choice-promise">${escapeHtml(channel.promise)}</span>
-  <span class="channel-choice-ready"><b>${channel.aiFitScore}% AI fit</b><small>พร้อมใช้งาน</small></span>
+  <span class="channel-choice-ready"><b>${escapeHtml(channel.fitLabel)}</b><small>พร้อมใช้งาน</small></span>
   <span class="channel-choice-select">เลือกช่องนี้</span>
 </label>`).join('');
 
@@ -24,7 +24,7 @@ export const renderSimpleCreate = (_workspace: Workspace): View => ({
     </header>
     <form id="autopilot-create-form" class="autopilot-composer" data-simple-create>
       <label for="simple-topic">วันนี้อยากทำคลิปเรื่องอะไร?</label>
-      <textarea id="simple-topic" name="topic" rows="2" maxlength="500" required>ให้ AI วางแผนคลิป YouTube จากไอเดียจนพร้อมอัปโหลด</textarea>
+      <textarea id="simple-topic" name="topic" rows="2" maxlength="500" required>พัทยาในอดีตเทียบกับปัจจุบัน: เมือง ชายหาด และการท่องเที่ยวเปลี่ยนไปอย่างไร โดยใช้หลักฐาน archive และข้อมูลปัจจุบัน</textarea>
       <div class="composer-controls">
         <label class="composer-select">${icon('play')}<span class="sr-only">รูปแบบ</span><select name="format"><option value="shorts">Shorts</option><option value="long">Long-form</option></select>${icon('chevron')}</label>
         <label class="composer-select">${icon('simulator')}<span class="sr-only">ความยาว</span><select name="durationSeconds"><option value="30">30 วินาที</option><option value="60">60 วินาที</option><option value="480">8 นาที</option></select>${icon('chevron')}</label>
@@ -34,7 +34,7 @@ export const renderSimpleCreate = (_workspace: Workspace): View => ({
       <p class="composer-note">${icon('sparkle')} AI จะเตรียม Research → Content Plan → Script → Fact-check → Production Pack ให้ครบอัตโนมัติ</p>
     </form>
     <section class="channel-recommendations" aria-labelledby="recommended-channel-heading">
-      <div class="simple-section-heading"><h2 id="recommended-channel-heading">แนะนำช่องสำหรับคุณ</h2><span>เลือกไว้ล่วงหน้าตามความเหมาะสมกับ AI</span></div>
+      <div class="simple-section-heading"><h2 id="recommended-channel-heading">ช่องหลักของคุณ</h2><span>Thailand Then and Now · ไทยเป็นหลัก พร้อม English edition</span></div>
       <div class="channel-choice-list">${channelChoices()}</div>
     </section>
     <section id="autopilot-state" class="autopilot-state" aria-live="polite"></section>

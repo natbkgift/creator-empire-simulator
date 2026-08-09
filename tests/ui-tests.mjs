@@ -28,6 +28,7 @@ import { renderSettings } from '../dist/src/features/settings.js';
 import { routeTitle } from '../dist/src/app/navigation.js';
 import { renderSimpleShell } from '../dist/src/app/simple-shell.js';
 import { renderSimpleCreate, renderSimpleChannels, renderSimpleProjects } from '../dist/src/features/simple.js';
+import { simpleChannelRecommendations, thailandThenNowProfile } from '../dist/src/domain/simple-channels.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -197,6 +198,20 @@ test('Light Studio Simple Mode exposes one primary Autopilot action and four cle
   assert.ok(!html.includes('Simple Beta'));
   assert.ok(renderSimpleChannels(workspace).html.includes('ช่องของฉัน'));
   assert.ok(renderSimpleProjects(workspace).html.includes('ผลงาน'));
+});
+
+test('Thailand Then and Now is Thai-first while supporting bilingual short and long content', () => {
+  const workspace = createSeedWorkspace();
+  const createView = renderSimpleCreate(workspace);
+  assert.equal(simpleChannelRecommendations[0].key, 'thailand-then-now');
+  assert.equal(simpleChannelRecommendations[0].name, 'Thailand Then and Now');
+  assert.equal(simpleChannelRecommendations[0].fitLabel, '83 ไทย · 84 EN');
+  assert.equal(thailandThenNowProfile.ideaId, 'thailand-10');
+  assert.equal(thailandThenNowProfile.primaryLanguage, 'th');
+  assert.deepEqual(thailandThenNowProfile.supportedLanguages, ['th', 'en']);
+  assert.deepEqual(thailandThenNowProfile.supportedFormats, ['shorts', 'long']);
+  assert.ok(createView.html.includes('พัทยาในอดีตเทียบกับปัจจุบัน'));
+  assert.ok(createView.html.includes('ไทยเป็นหลัก'));
 });
 
 let passed = 0;
