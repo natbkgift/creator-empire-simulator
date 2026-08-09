@@ -11,9 +11,9 @@ export interface RouteState {
 }
 
 export const parseRoute = (): RouteState => {
-  const raw = location.hash.replace(/^#\/?/, '') || 'hq';
+  const raw = location.hash.replace(/^#\/?/, '') || 'beta/create';
   const [namePart, query = ''] = raw.split('?');
-  return { name: namePart || 'hq', params: new URLSearchParams(query) };
+  return { name: namePart || 'beta/create', params: new URLSearchParams(query) };
 };
 
 export const getQuery = (): URLSearchParams => parseRoute().params;

@@ -281,7 +281,7 @@ registerRenderer(render);
 
 void initializeStore().then((workspace) => {
   subscribe(() => render());
-  if (!location.hash) location.hash = workspace.settings.onboardingComplete ? '#/hq' : '#/onboarding';
+  if (!location.hash) location.hash = '#/beta/create';
   else render();
   if ('serviceWorker' in navigator) {
     const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.5.0', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };

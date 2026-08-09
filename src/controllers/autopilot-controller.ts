@@ -157,7 +157,7 @@ const refreshYoutubeStatus = async (): Promise<void> => {
   const target = document.querySelector<HTMLElement>('#youtube-state');
   if (!target) return;
   try {
-    const status = await fetchJson<{ configured: boolean; connected: boolean; latestUpload?: { id: string; status: string; progress: number; videoUrl?: string; error?: string } }>('/api/youtube/status');
+    const status = await fetchJson<{ configured: boolean; connected: boolean; latestUpload?: { id: string; status: string; progress: number; videoId?: string; videoUrl?: string; error?: string } }>('/api/youtube/status');
     if (!status.configured) {
       target.innerHTML = '<p class="youtube-blocked">ยังไม่ได้ตั้งค่า Google OAuth Web Client บนเซิร์ฟเวอร์</p>';
       return;
@@ -172,7 +172,9 @@ const refreshYoutubeStatus = async (): Promise<void> => {
       window.setTimeout(() => void refreshYoutubeStatus(), 2500); return;
     }
     if (latest?.status === 'uploaded' && latest.videoUrl) {
-      target.innerHTML = `<p class="youtube-success">อัปโหลด Private สำเร็จ</p><a class="simple-secondary" href="${safeUrl(latest.videoUrl)}" target="_blank" rel="noreferrer">เปิดใน YouTube Studio</a>`; return;
+      const destination = latest.videoId ? `https://studio.youtube.com/video/${encodeURIComponent(latest.videoId)}/edit` : safeUrl(latest.videoUrl);
+      const label = latest.videoId ? 'เปิดใน YouTube Studio' : 'เปิดวิดีโอบน YouTube';
+      target.innerHTML = `<p class="youtube-success">อัปโหลด Private สำเร็จ</p><a class="simple-secondary" href="${destination}" target="_blank" rel="noreferrer">${label}</a>`; return;
     }
     if (latest?.status === 'needs_attention') {
       target.innerHTML = `<p class="youtube-blocked">${escapeHtml(latest.error || 'อัปโหลดไม่สำเร็จ')}</p><button class="simple-secondary" type="button" data-simple-action="retry-youtube" data-upload-id="${escapeHtml(latest.id)}">ลองอัปโหลดต่อ</button>`; return;

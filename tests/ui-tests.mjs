@@ -193,6 +193,8 @@ test('Light Studio Simple Mode exposes one primary Autopilot action and four cle
   assert.equal((html.match(/class="simple-nav-link /g) ?? []).length, 4);
   assert.equal((html.match(/class="channel-choice /g) ?? []).length, 3);
   ['สร้างวิดีโอ', 'ช่องของฉัน', 'ผลงาน', 'Expert'].forEach((label) => assert.ok(html.includes(label)));
+  assert.ok(html.includes('Simple Mode'));
+  assert.ok(!html.includes('Simple Beta'));
   assert.ok(renderSimpleChannels(workspace).html.includes('ช่องของฉัน'));
   assert.ok(renderSimpleProjects(workspace).html.includes('ผลงาน'));
 });

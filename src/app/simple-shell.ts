@@ -21,7 +21,7 @@ export const renderSimpleShell = (workspace: Workspace, route: string, content: 
     </aside>
     <header class="simple-topbar">
       <div class="simple-workspace"><span class="simple-avatar">FL</span><strong>${escapeHtml(workspace.name || 'FlowBiz Creator Lab')}</strong>${icon('chevron')}</div>
-      <span class="simple-beta-badge">Simple Beta</span>
+      <span class="simple-beta-badge">Simple Mode</span>
     </header>
     <main id="simple-main" class="simple-main" tabindex="-1">${content}</main>
   </div>`;
