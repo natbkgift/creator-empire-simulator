@@ -64,6 +64,18 @@ def main() -> None:
         launch_args["executable_path"] = CHROMIUM
     with sync_playwright() as p:
         browser = p.chromium.launch(**launch_args)
+
+        startup_context = browser.new_context(viewport={"width": 1440, "height": 1000})
+        startup_context.add_init_script("IDBFactory.prototype.open = function () { return {}; };")
+        startup_page = startup_context.new_page()
+        startup_page.goto(f"{BASE_URL}/#/hq", wait_until="domcontentloaded")
+        startup_page.wait_for_selector(".startup-screen")
+        startup_surface = startup_page.locator(".startup-shell").evaluate("el => getComputedStyle(el).backgroundColor")
+        record("Startup uses a dedicated Editorial Dark shell", startup_surface not in {"rgb(255, 255, 255)", "rgba(0, 0, 0, 0)"}, startup_surface)
+        startup_page.wait_for_selector(".side-rail, .onboarding-progress", timeout=8000)
+        record("A stalled IndexedDB open cannot trap the app on Loading", startup_page.locator(".startup-screen").count() == 0)
+        startup_context.close()
+
         context = browser.new_context(viewport={"width": 1440, "height": 1000})
         page = context.new_page()
         console_errors: list[str] = []
@@ -147,6 +159,26 @@ def main() -> None:
         wait_app(page)
         record("Settings route has the correct document title", page.title().startswith("Settings ·"), page.title())
         record("Settings form controls have accessible names", unnamed_form_control_count(page) == 0)
+        before_replay = api("/api/workspace").get("workspace") or {}
+        before_counts = (len(before_replay.get("channels", [])), len(before_replay.get("projects", [])))
+        replay_button = page.locator('[data-action="restart-onboarding"]')
+        record("Settings exposes Run setup again", replay_button.count() == 1)
+        replay_button.click()
+        page.wait_for_selector(".onboarding-progress")
+        record("Setup replay opens at step one", "replay=1" in page.url and "เริ่มตั้งค่า" in page.locator(".onboarding-card").inner_text())
+        onboarding_surface = page.locator(".onboarding-card").evaluate("el => getComputedStyle(el).backgroundColor")
+        record("Onboarding follows Editorial Dark", onboarding_surface != "rgb(255, 255, 255)", onboarding_surface)
+        page.locator("[data-onboard-next]").click()
+        page.wait_for_selector("#onboarding-settings")
+        page.locator('#onboarding-settings button[type="submit"]').click()
+        page.wait_for_selector("[data-onboard-finish]")
+        record("Setup replay explicitly preserves existing workspace data", page.locator(".setup-replay-safety").count() == 1 and page.locator("#keep-demo").count() == 0)
+        page.locator("[data-onboard-finish]").click()
+        page.wait_for_selector(".side-rail")
+        page.wait_for_timeout(500)
+        after_replay = api("/api/workspace").get("workspace") or {}
+        after_counts = (len(after_replay.get("channels", [])), len(after_replay.get("projects", [])))
+        record("Setup replay returns to Today without deleting workspace data", page.url.endswith("#/hq") and before_counts == after_counts, f"{before_counts} -> {after_counts}")
 
         page.set_viewport_size({"width": 390, "height": 844})
         page.goto(f"{BASE_URL}/#/calendar", wait_until="domcontentloaded")

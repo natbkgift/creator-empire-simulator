@@ -847,7 +847,7 @@ def ai_capabilities() -> dict[str, Any]:
 
 
 class CreatorHandler(BaseHTTPRequestHandler):
-    server_version = "CreatorEmpireSQLite/1.4.5"
+    server_version = "CreatorEmpireSQLite/1.4.6"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), fmt % args))
@@ -863,7 +863,7 @@ class CreatorHandler(BaseHTTPRequestHandler):
                 json_response(self, 200, {
                     "ok": True,
                     "service": "creator-empire",
-                    "version": "1.4.5",
+                    "version": "1.4.6",
                     "release": os.environ.get("CREATOR_EMPIRE_RELEASE_SHA", "dev"),
                 }); return
             if path == "/api/workspace":

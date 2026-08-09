@@ -1,4 +1,4 @@
-const CACHE = 'creator-empire-v1.4.5';
+const CACHE = 'creator-empire-v1.4.6';
 const ASSETS = [
   './', './index.html', './styles/app.css', './manifest.webmanifest',
   './icon.svg', './styles/variables.css', './styles/base.css', './styles/layout.css', './styles/components.css',

@@ -43,6 +43,12 @@ export const renderSettings = (workspace: Workspace): string => `${pageHeader('S
       </article>
     </section>
     <aside class="stack">
+      <article class="panel settings-section setup-replay-card">
+        <div class="panel-title"><div><h3>Setup & onboarding</h3><p>กลับไปดูขั้นตอนตั้งค่าครั้งแรกได้ทุกเมื่อ</p></div><span class="chip green">Safe replay</span></div>
+        <p class="small-copy">ใช้เมื่อต้องการทบทวน Timezone, Capacity, CapCut credits และ Demo Workspace อีกครั้ง</p>
+        <button class="btn primary" type="button" data-action="restart-onboarding">Run setup again</button>
+        <span class="setup-safety-note">ไม่ลบ Channel, Video, Calendar หรือ Analytics</span>
+      </article>
       <article class="panel settings-section"><div class="panel-title"><div><h3>Data safety</h3><p>SQLite เป็น durable store และ IndexedDB เป็น offline mirror</p></div></div><div class="data-proof-list"><div><b>Workspace revision</b><span>${workspace.revision ?? 0}</span></div><div><b>SQLite</b><span>transactional + history</span></div><div><b>Browser mirror</b><span>reconciles on reconnect</span></div><div><b>Secrets</b><span>environment / session memory only</span></div></div></article>
       <article class="panel settings-section"><div class="panel-title"><div><h3>Skill tree</h3><p>Progress from productive events</p></div></div><div class="stack tight">${Object.entries(workspace.skills).slice(0,8).map(([key,value]) => `<div class="skill-line"><span>${escapeHtml(key.replace(/[A-Z]/g,m=>` ${m}`).trim())}</span>${progress(value,key)}<b>${value}</b></div>`).join('')}</div></article>
     </aside>

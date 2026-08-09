@@ -28,7 +28,7 @@ import { renderMonetization } from './features/monetization.js';
 import { renderPolicy } from './features/policy.js';
 import { renderSettings } from './features/settings.js';
 import { renderImportExport } from './features/importExport.js';
-import { renderOnboarding } from './features/onboarding.js';
+import { isOnboardingReplayActive, renderOnboarding, resetOnboardingFlow, restartOnboardingFlow } from './features/onboarding.js';
 
 import { copyText, stringFrom } from './controllers/helpers.js';
 import { saveSettings } from './controllers/settings-controller.js';
@@ -92,8 +92,12 @@ const render = (): void => {
     const workspace = getWorkspace();
     const state = parseRoute();
     const route = normalizeRoute(state.name);
+    const replayRequested = route === 'onboarding' && state.params.get('replay') === '1';
+    if (replayRequested && !isOnboardingReplayActive()) restartOnboardingFlow();
+    const replayingOnboarding = route === 'onboarding' && (replayRequested || isOnboardingReplayActive());
     if (!workspace.settings.onboardingComplete && route !== 'onboarding') { navigate('onboarding'); return; }
-    if (workspace.settings.onboardingComplete && route === 'onboarding') { navigate('hq'); return; }
+    if (workspace.settings.onboardingComplete && route === 'onboarding' && !replayingOnboarding) { navigate('hq'); return; }
+    if (route !== 'onboarding') resetOnboardingFlow();
     document.documentElement.lang = workspace.settings.locale;
     document.body.classList.toggle('reduce-motion', workspace.settings.reducedMotion);
     const view = getRouteView(workspace, route, state.params);
@@ -182,6 +186,7 @@ app.addEventListener('click', (event) => {
     }
   }
   else if (action === Actions.DISMISS_TOAST) target.closest('.toast-region')?.remove();
+  else if (action === Actions.RESTART_ONBOARDING) { restartOnboardingFlow(); navigate('onboarding', { replay: '1' }); }
   else if (action === Actions.COMPLETE_ONBOARDING) {
     updateWorkspace((draft) => { draft.settings.onboardingComplete = true; awardXp(draft, 'onboarding-complete', 60, 'consistency'); });
     navigate('hq');
@@ -213,7 +218,7 @@ app.addEventListener('click', (event) => {
   else if (action === Actions.RESET_WORKSPACE) {
     void confirmDialog('Reset entire workspace', 'ข้อมูลทั้งหมดจะถูกแทนที่ด้วย Demo Workspace เริ่มต้น การดำเนินการนี้ย้อนกลับไม่ได้หากไม่มี Backup', 'Reset').then((confirmed) => {
       if (!confirmed) return;
-      const seed = createSeedWorkspace(); seed.settings.onboardingComplete = true; replaceWorkspace(seed); showToast('Reset Workspace แล้ว'); navigate('hq');
+      const seed = createSeedWorkspace(); resetOnboardingFlow(); replaceWorkspace(seed); showToast('Reset Workspace แล้ว · เริ่มตั้งค่าใหม่'); navigate('onboarding');
     });
   }
 });
@@ -269,10 +274,11 @@ void initializeStore().then((workspace) => {
   if (!location.hash) location.hash = workspace.settings.onboardingComplete ? '#/hq' : '#/onboarding';
   else render();
   if ('serviceWorker' in navigator) {
-    const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.4.5', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };
+    const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.4.6', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };
     if (document.readyState === 'complete') registerServiceWorker(); else window.addEventListener('load', registerServiceWorker, { once: true });
   }
 }).catch((error) => {
-  console.error(error);
-  app.innerHTML = `<main class="fatal-error"><h1>Unable to start Creator Empire Simulator</h1><p>${escapeHtml(error instanceof Error ? error.message : 'Unknown startup error')}</p></main>`;
+  console.error('Workspace initialization failed.', error);
+  app.innerHTML = `<div class="startup-screen startup-failed"><main class="startup-shell" role="alert"><div class="startup-brand"><span class="startup-mark" aria-hidden="true">CE</span><span><strong>Creator Empire</strong><small>Startup recovery</small></span></div><div class="startup-copy"><span class="eyebrow">Workspace unavailable</span><h1>เปิด Workspace ไม่สำเร็จ</h1><p>ข้อมูลเดิมยังไม่ถูกเปลี่ยนแปลง ลองเชื่อมต่อใหม่อีกครั้ง หากยังไม่สำเร็จให้ตรวจสถานะ Server และ SQLite</p></div><div class="startup-actions"><button class="btn primary" type="button" data-startup-retry>ลองอีกครั้ง</button></div></main></div>`;
+  app.querySelector<HTMLElement>('[data-startup-retry]')?.addEventListener('click', () => location.reload());
 });

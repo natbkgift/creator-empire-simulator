@@ -173,6 +173,15 @@ test('OpenAI router UI exposes Luna default, Terra auto-route, and important-scr
   assert.ok(terra.includes('Terra · auto-routed') && terra.includes('Generate with Terra'));
 });
 
+test('Settings exposes a non-destructive first-time setup replay', () => {
+  const workspace = createSeedWorkspace();
+  workspace.settings.onboardingComplete = true;
+  const settings = renderSettings(workspace);
+  assert.ok(settings.includes('Run setup again'));
+  assert.ok(settings.includes('data-action="restart-onboarding"'));
+  assert.ok(settings.includes('ไม่ลบ Channel, Video, Calendar หรือ Analytics'));
+});
+
 let passed = 0;
 for (const t of tests) {
   try {

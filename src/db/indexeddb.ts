@@ -5,18 +5,37 @@ const DB_NAME = 'creator-empire-simulator';
 const STORE_NAME = 'workspaces';
 const DB_VERSION = 1;
 const FALLBACK_KEY = 'creator-empire-simulator-workspace-v1';
+const IDB_OPEN_TIMEOUT_MS = 2500;
 
 const openDb = (): Promise<IDBDatabase> =>
   new Promise((resolve, reject) => {
+    let settled = false;
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('IndexedDB open timed out.'));
+    }, IDB_OPEN_TIMEOUT_MS);
+    const fail = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      reject(error);
+    };
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Unable to open IndexedDB.'));
+    request.onsuccess = () => {
+      if (settled) { request.result.close(); return; }
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve(request.result);
+    };
+    request.onerror = () => fail(request.error ?? new Error('Unable to open IndexedDB.'));
+    request.onblocked = () => fail(new Error('IndexedDB open was blocked by another tab.'));
   });
 
 export const loadWorkspaceRecord = async (): Promise<Workspace | null> => {

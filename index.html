@@ -14,7 +14,20 @@
   <title>Creator Empire Simulator</title>
 </head>
 <body>
-  <div id="app"><div class="onboarding-screen"><div class="onboarding-brand"><span class="brand-mark"></span><strong>Creator Empire</strong></div><main class="onboarding-card"><div class="onboarding-copy"><span class="eyebrow">Loading local workspace</span><h1>Creator Empire Simulator</h1><p>กำลังเปิด Creator OS และฐานข้อมูล SQLite…</p></div></main></div></div>
+  <div id="app">
+    <div class="startup-screen" role="status" aria-live="polite" aria-label="Opening Creator Empire workspace">
+      <main class="startup-shell">
+        <div class="startup-brand"><span class="startup-mark" aria-hidden="true">CE</span><span><strong>Creator Empire</strong><small>Creator operating system</small></span></div>
+        <div class="startup-copy">
+          <span class="eyebrow">Preparing your workspace</span>
+          <h1>Opening Creator OS</h1>
+          <p>กำลังเชื่อมต่อ SQLite และตรวจสอบ Browser recovery mirror โดยไม่เปลี่ยนข้อมูลของคุณ</p>
+        </div>
+        <div class="startup-progress" aria-hidden="true"><span></span></div>
+        <small class="startup-hint">ปกติใช้เวลาเพียงไม่กี่วินาที</small>
+      </main>
+    </div>
+  </div>
   <noscript>Creator Empire Simulator requires JavaScript.</noscript>
   <script type="module" src="./src/main.js"></script>
 </body>

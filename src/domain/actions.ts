@@ -20,6 +20,7 @@ export const Actions = {
   COMPLETE_WORKFLOW_TASK: 'complete-workflow-task',
   GENERATE_WORKFLOW_PLAN: 'generate-workflow-plan',
   COMPLETE_ONBOARDING: 'complete-onboarding',
+  RESTART_ONBOARDING: 'restart-onboarding',
   COMPLETE_DAILY_MISSION: 'complete-daily-mission',
 
   COPY_PROMPT: 'copy-prompt',
