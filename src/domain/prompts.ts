@@ -61,6 +61,29 @@ PROJECT CONTEXT
 `.trim();
 };
 
+const factCheckInput = ({ project, workspace }: PromptContext): string => {
+  if (!project) return '';
+  const attachedSources = workspace.sources
+    .filter((source) => source.projectId === project.id || project.sourceIds.includes(source.id))
+    .slice(0, 12)
+    .map((source, index) => `${index + 1}. ${source.title} | ${source.publisher || 'Unknown publisher'} | ${source.url || 'No URL'} | ${source.notes || 'No notes'}`)
+    .join('\n');
+  const research = project.researchSummary.trim() || 'No research summary has been saved yet.';
+  const script = project.script.trim();
+  return `
+FACT-CHECK INPUT
+- Workflow stage: research verification before scripting
+- Audit the saved research claims below. A missing script is not a blocker at this stage.
+
+SAVED RESEARCH SUMMARY
+${research.slice(0, 6000)}
+
+SAVED SOURCES
+${attachedSources || 'No sources have been attached yet. Report this as a sourcing gap, not as a missing-story error.'}
+${script ? `\nEXISTING SCRIPT (also audit because one is available)\n${script.slice(0, 6000)}` : ''}
+`.trim();
+};
+
 const outputSchema = (type: PromptType): string => {
   if (type === 'niche-research') {
     return `Return valid JSON only:\n{"summary":"...","sources":[{"title":"...","url":"...","publisher":"...","claimType":"documented|reported|disputed|context","notes":"..."}],"topicClusters":["..."],"validationSprint":[{"title":"...","format":"shorts|long","reason":"..."}],"risks":["..."],"nextAction":"..."}`;
@@ -107,7 +130,7 @@ const outputSchema = (type: PromptType): string => {
 const instructionsByType: Record<PromptType, string> = {
   'niche-research': `Evaluate the niche for audience demand, repeatability, differentiation, monetization, production effort, source availability, and Thai-versus-English market fit. Identify 20 topic clusters and propose a 12-video validation sprint.`,
   'topic-research': `Research the selected topic using primary or authoritative sources. Separate verified facts, reported accounts, disputed claims, and context. Do not invent missing details.`,
-  'fact-check': `Audit every factual claim in the proposed story. Flag names, dates, locations, statistics, historical visuals, uniforms, equipment, quotations, and causal claims that need correction or caveats.`,
+  'fact-check': `Audit every factual claim in the saved research summary and attached sources before scripting. If a script is already available, audit it too. Flag names, dates, locations, statistics, visuals, quotations, and causal claims that need correction or caveats. Do not block merely because a script has not been written yet.`,
   'competitor-pattern': `Study successful content patterns without copying protected expression. Extract hook structures, pacing, title patterns, information density, visual rhythm, and audience promises. Produce transformed principles, not a clone.`,
   'hook-generator': `Create 12 distinct hooks for the same topic. Each hook must deliver a concrete reason to stop scrolling in the first two seconds. Avoid generic phrases such as “Did you know?” unless the wording adds a sharp contradiction.`,
   'shorts-script': `Write an original ${55}-second vertical-video script. Use a strong first two seconds, clear progression, one major payoff, and a closing line that creates curiosity without begging for engagement. Use short spoken sentences and natural phrasing.`,
@@ -125,13 +148,14 @@ const instructionsByType: Record<PromptType, string> = {
 
 export const generatePrompt = (context: PromptContext): string => {
   const title = typeNames[context.type];
+  const evidence = context.type === 'fact-check' ? `\n\n${factCheckInput(context)}` : '';
   const detail = context.advanced
     ? `\nADVANCED REQUIREMENTS\n- Show assumptions and confidence level.\n- Include a red-team pass for factual, copyright, and mass-produced-template risk.\n- Provide an execution checklist with owners and estimated minutes.\n- Optimize for mobile-first 9:16 viewing where relevant.`
     : '';
   const concise = context.shorter
     ? `\nCONCISION RULE\nKeep the response to the minimum information required for direct execution.`
     : '';
-  return `# ${title.toUpperCase()} PROMPT\n\nYou are a senior creator strategist, researcher, writer, and production director.\n\n${baseContext(context)}\n\nTASK\n${instructionsByType[context.type]}\n\nQUALITY RULES\n- Do not fabricate facts, sources, quotes, metrics, or platform eligibility.\n- Distinguish documented facts from reported or disputed accounts.\n- Write native, natural ${languageName(context.language)}; do not translate literally.\n- Prioritize original research, original scripting, and clear transformation.\n- Keep generated visuals consistent and disclose realistic synthetic scenes where required.\n- Avoid mass-produced, interchangeable, or minimally varied output.${detail}${concise}\n\nOUTPUT CONTRACT\n${outputSchema(context.type)}`;
+  return `# ${title.toUpperCase()} PROMPT\n\nYou are a senior creator strategist, researcher, writer, and production director.\n\n${baseContext(context)}${evidence}\n\nTASK\n${instructionsByType[context.type]}\n\nQUALITY RULES\n- Do not fabricate facts, sources, quotes, metrics, or platform eligibility.\n- Distinguish documented facts from reported or disputed accounts.\n- Write native, natural ${languageName(context.language)}; do not translate literally.\n- Prioritize original research, original scripting, and clear transformation.\n- Keep generated visuals consistent and disclose realistic synthetic scenes where required.\n- Avoid mass-produced, interchangeable, or minimally varied output.${detail}${concise}\n\nOUTPUT CONTRACT\n${outputSchema(context.type)}`;
 };
 
 export const recommendCapCutMode = (idea?: Idea, project?: VideoProject): {

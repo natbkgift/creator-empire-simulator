@@ -266,7 +266,11 @@ document.addEventListener('keydown', (event) => {
   if (event.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') { event.preventDefault(); openCommandPalette(); }
 });
 
-window.addEventListener('hashchange', () => { if (normalizeRoute(parseRoute().name) !== 'prompts') setParseMessage(''); render(); });
+window.addEventListener('hashchange', () => {
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  if (normalizeRoute(parseRoute().name) !== 'prompts') setParseMessage('');
+  render();
+});
 registerRenderer(render);
 
 void initializeStore().then((workspace) => {

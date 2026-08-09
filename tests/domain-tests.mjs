@@ -67,6 +67,17 @@ test('all 16 prompt workflows remain context-aware', () => {
   assert.match(prompt, /SHORTS SCRIPT PROMPT/); assert.match(prompt, /Return valid JSON only/); assert.match(prompt, /red-team/i);
 });
 
+test('fact-check audits saved research before scripting without treating a missing script as a blocker', () => {
+  const workspace = migratedSeed(); const channel = workspace.channels[0]; const project = workspace.projects[0];
+  const idea = workspace.ideas.find((item) => item.id === project.ideaId);
+  project.researchSummary = 'Saved research claim: human review remains required before publishing AI-assisted content.';
+  project.script = '';
+  workspace.sources.push({ id: 'source_fact_context', projectId: project.id, title: 'Authoritative workflow guide', url: 'https://example.com/workflow-guide', publisher: 'Example Publisher', accessedAt: '2026-08-09T00:00:00.000Z', claimType: 'context', notes: 'Supports the saved research claim.' });
+  const prompt = generatePrompt({ type: 'fact-check', language: 'en', idea, channel, project, workspace });
+  assert.match(prompt, /FACT-CHECK INPUT/); assert.match(prompt, /Saved research claim/); assert.match(prompt, /workflow-guide/);
+  assert.match(prompt, /missing script is not a blocker/i); assert.doesNotMatch(prompt, /Audit every factual claim in the proposed story/);
+});
+
 test('CapCut mode keeps factual content controlled and product content Director-capable', () => {
   const workspace = migratedSeed(); const historyIdea = workspace.ideas.find((item) => item.categoryId === 'history');
   assert.equal(recommendCapCutMode(historyIdea, workspace.projects[0]).mode, 'standard');
