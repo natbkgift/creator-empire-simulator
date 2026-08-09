@@ -26,6 +26,8 @@ export const renderHq = (workspace: Workspace): string => {
   const capacity = capacityStats(workspace);
   const actionAttrs = `data-project-id="${escapeHtml(project?.id ?? '')}" data-task-id="${escapeHtml(mission.taskId ?? '')}"`;
   const today = todayIso();
+  const missionTask = workspace.calendarTasks.find((task) => task.id === mission.taskId);
+  const missionOverdue = Boolean(missionTask && !missionTask.completed && missionTask.date < today);
   const todayTasks = workspace.calendarTasks.filter((task) => task.date === today && !task.completed).toSorted((a,b) => a.startTime.localeCompare(b.startTime)).slice(0,5);
   const focused = projectsInFocus(workspace);
   const completeCount = focused.filter(isProductionComplete).length;
@@ -34,7 +36,7 @@ export const renderHq = (workspace: Workspace): string => {
 
   return `${pageHeader('Today','เห็นเฉพาะสิ่งที่ควรทำต่อ แล้วให้ Mission เปิด Prompt / CapCut / Policy ตาม Context ให้เอง', `<a class="btn" href="${routeHref('calendar')}">Calendar</a><a class="btn primary" href="${routeHref('blueprint', channel ? { channel: channel.id } : undefined)}">+ Plan video</a>`)}
     <section class="panel mission-deck">
-      <div class="mission-title"><span class="kicker">NEXT MISSION · +${mission.xp} XP</span><h3>${escapeHtml(mission.title)}</h3><p>${escapeHtml(mission.detail)}</p><div class="mission-meta">${channel ? chip(channel.name,'cyan') : chip('Portfolio','violet')}${project ? chip(statusLabels[project.status], productionComplete ? 'green' : 'amber') : ''}</div>${missionStageRail(project?.status)}<div class="row wrap" style="margin-top:16px">${button('Start now','start-mission',{tone:'primary',iconName:'play',attrs:actionAttrs})}${project ? `<a class="btn" href="${routeHref('calendar',{project:project.id})}">View plan</a>` : ''}</div></div>
+      <div class="mission-title"><span class="kicker">${missionOverdue ? 'OVERDUE MISSION' : 'NEXT MISSION'} · +${mission.xp} XP</span><h3>${escapeHtml(mission.title)}</h3><p>${escapeHtml(mission.detail)}</p><div class="mission-meta">${missionOverdue && missionTask ? chip(`Overdue since ${missionTask.date}`,'red') : ''}${channel ? chip(channel.name,'cyan') : chip('Portfolio','violet')}${project ? chip(statusLabels[project.status], productionComplete ? 'green' : 'amber') : ''}</div>${missionStageRail(project?.status)}<div class="row wrap" style="margin-top:16px">${button('Start now','start-mission',{tone:'primary',iconName:'play',attrs:actionAttrs})}${project ? `<a class="btn" href="${routeHref('calendar',{project:project.id})}">View plan</a>` : ''}</div></div>
       <div class="progress-orbit" aria-label="Project progress ${mission.progress}%"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="48"/><circle class="fill" cx="60" cy="60" r="48" style="stroke-dasharray:302;stroke-dashoffset:${302 * (1 - mission.progress / 100)}"/></svg><div class="orbit-copy"><b>${mission.progress}%</b><span>${productionComplete ? 'complete' : 'to publish'}</span></div></div>
     </section>
 

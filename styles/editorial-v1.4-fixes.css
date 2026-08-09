@@ -78,3 +78,83 @@
   .mission-stage-rail { gap:3px; overflow:hidden; }
   .mission-stage-step { font-size:8px; }
 }
+
+/* v1.4.5 readability, accessibility and responsive QA corrections. */
+body { font-size:15px; line-height:1.6; }
+.side-rail .nav-dot { min-height:48px!important; font:600 15px/1.2 var(--font-body)!important; }
+.side-rail .nav-label { font-size:15px!important; letter-spacing:-.01em; }
+.side-ai-copy strong { font-size:13px!important; }
+.side-ai-copy small { font-size:11px!important; }
+.page-header p { font-size:14px!important; }
+.panel-title h3,.section-head h3 { font-size:15px!important; }
+.panel-title p,.section-head p,.small-copy { font-size:12.5px!important; line-height:1.6!important; }
+.kicker,.eyebrow,.label,.editorial-section-label { font-size:10.5px!important; line-height:1.4!important; }
+.field>label,label>span { font-size:12px!important; line-height:1.45!important; }
+input,select,textarea,.input,.select,.textarea { min-height:42px; font-size:13px!important; }
+.btn { min-height:40px!important; font-size:12.5px!important; }
+.btn.small { min-height:36px!important; font-size:12px!important; }
+.chip { font-size:11px!important; line-height:1.3!important; }
+.global-search { min-height:40px; font-size:12.5px; }
+.ai-mode-status,.system-status,.icon-command { min-height:40px; font-size:11px; }
+.icon-command { width:40px; }
+
+/* Keep the seven Production groups while allowing the board to wrap at real viewports. */
+.production-flow-board {
+  grid-template-columns:repeat(7,minmax(150px,1fr));
+  min-width:0;
+  overflow:visible;
+}
+.content:has(.production-flow-board) { overflow-x:visible; }
+.flow-group-head span { font-size:12px!important; }
+.flow-group-head small,.flow-card-meta,.flow-card-publish,.flow-video-card p { font-size:11.5px!important; line-height:1.5!important; }
+.flow-video-card h3 { font-size:14px!important; }
+.flow-video-open { min-height:44px; }
+.flow-empty,.growth-loop-note p { font-size:11.5px; }
+.growth-loop-note span,.growth-loop-note small,.detail-stage,.video-complete-badge { font-size:10.5px; }
+
+/* Calendar now uses the Editorial Dark surface and passes normal-text contrast. */
+.day-column { background:var(--surface-2)!important; color:var(--text)!important; }
+.day-head b { color:var(--text)!important; font-size:12px!important; }
+.day-head span { color:var(--muted)!important; font-size:11px!important; }
+.calendar-task-card { background:var(--surface)!important; color:var(--text)!important; padding:10px; }
+.calendar-task-body strong { color:var(--text)!important; font-size:13px!important; line-height:1.45!important; }
+.calendar-task-body span,.calendar-task-body small,.task-lock-copy { color:var(--muted)!important; font-size:11px!important; line-height:1.5!important; }
+.task-state-text { font-size:10px!important; }
+.calendar-mission-banner p { font-size:13px; line-height:1.55; }
+
+/* Normalize small editorial metadata without flattening the display hierarchy. */
+.channel-card-top p,.channel-workspace-title>p,.channel-strategy-grid p,.channel-strategy-grid dd,.editorial-list,.plan-section-head p,.channel-create-video p { font-size:13px; }
+.channel-active-video span,.channel-active-video small,.channel-workspace-active span,.channel-workspace-active small,.channel-workspace-metrics span,.workspace-video-switch span,.strategy-rows span,.strategy-rows b,.risk-line,.content-pillars span,.channel-video-list small { font-size:11px!important; }
+.channel-card-open,.monetization-cards p,.editorial-plan-table td,.recent-publishes td,.insights-workbench summary,.decision-metrics span,.insights-scope p,.ai-coverage-summary span { font-size:12px; }
+.editorial-plan-table th,.recent-publishes th,.plan-title-button span,.format-badge,.plan-status,.money-status { font-size:10.5px!important; }
+
+@media (max-width: 1600px) {
+  .production-flow-board { grid-template-columns:repeat(4,minmax(180px,1fr)); }
+}
+
+@media (max-width: 900px) {
+  .production-flow-board { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+@media (max-width: 767px) {
+  body { font-size:15px; }
+  .page-header p { font-size:13.5px!important; }
+  .btn,.btn.small { min-height:44px!important; font-size:13px!important; }
+  .mobile-search,.mobile-more { width:44px; height:44px; }
+  .mobile-day-nav { grid-template-columns:44px 1fr 44px; }
+  .mobile-day-nav>a { width:44px; height:44px; }
+  .mobile-day-nav strong { font-size:14px; }
+  .mobile-day-nav span { font-size:11px; }
+  .calendar-mission-banner { grid-template-columns:1fr!important; gap:16px; align-items:start; }
+  .calendar-mission-banner>.row { justify-content:flex-start; }
+  .mobile-nav { min-height:48px; }
+  .mobile-nav span { font-size:10.5px!important; }
+  .mobile-context-copy span,.mobile-context-copy strong { font-size:12px; }
+  .mobile-context-copy small { font-size:10.5px; }
+  .production-flow-board { grid-template-columns:1fr; min-width:0; gap:18px; }
+  .pipeline-summary { display:grid!important; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; width:100%; overflow:visible!important; }
+  .pipeline-summary .metric { min-width:0; padding:8px 4px; text-align:center; }
+  .pipeline-summary .metric span { display:block; min-height:28px; font-size:10.5px; line-height:1.3; }
+  .flow-group { padding-bottom:4px; }
+  .flow-group-head { position:sticky; top:62px; z-index:2; padding:10px 4px; background:var(--content-bg); }
+}

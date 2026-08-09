@@ -5,7 +5,7 @@ import { initializeStore, getWorkspace, subscribe, updateWorkspace, replaceWorks
 import { parseRoute, navigate } from './app/router.js';
 import { registerRenderer } from './app/runtime.js';
 import { renderShell } from './app/shell.js';
-import { navigation } from './app/navigation.js';
+import { routeTitle } from './app/navigation.js';
 import { escapeHtml, todayIso } from './domain/utils.js';
 import { createSeedWorkspace } from './seed/demo.js';
 import { applyChannelFocus, applyProjectFocus, applyPortfolioFocus } from './domain/focus.js';
@@ -42,6 +42,17 @@ const app = document.querySelector<HTMLElement>('#app');
 if (!app) throw new Error('App root #app was not found.');
 let rendering = false;
 const normalizeRoute = (route: string): string => route === 'pipeline' ? 'production' : route;
+
+const associateVisibleFieldLabels = (root: HTMLElement, route: string): void => {
+  root.querySelectorAll<HTMLElement>('.field').forEach((field, index) => {
+    const label = Array.from(field.children).find((child): child is HTMLLabelElement => child instanceof HTMLLabelElement);
+    const control = Array.from(field.children).find((child): child is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement =>
+      child instanceof HTMLInputElement || child instanceof HTMLSelectElement || child instanceof HTMLTextAreaElement);
+    if (!label || !control) return;
+    if (!control.id) control.id = `${route}-field-${control.name || index}`;
+    label.htmlFor = control.id;
+  });
+};
 
 const completeDailyMission = (): void => {
   const mission = dailyMission(getWorkspace());
@@ -87,9 +98,10 @@ const render = (): void => {
     document.body.classList.toggle('reduce-motion', workspace.settings.reducedMotion);
     const view = getRouteView(workspace, route, state.params);
     app.innerHTML = route === 'onboarding' ? view.html : renderShell(workspace, route, view.html);
+    associateVisibleFieldLabels(app, route);
     view.mount?.();
     document.body.dataset.route = route;
-    document.title = `${navigation.find((item) => item.route === route)?.label ?? 'Creator Empire'} · Creator Empire Simulator`;
+    document.title = `${routeTitle(route)} · Creator Empire Simulator`;
   } catch (error) {
     console.error('Render failed', error);
     app.innerHTML = `<main class="fatal-error"><h1>Creator Empire encountered an error</h1><pre>${escapeHtml(error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error))}</pre><button type="button" onclick="location.reload()">Reload</button></main>`;
@@ -257,7 +269,7 @@ void initializeStore().then((workspace) => {
   if (!location.hash) location.hash = workspace.settings.onboardingComplete ? '#/hq' : '#/onboarding';
   else render();
   if ('serviceWorker' in navigator) {
-    const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.4.4', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };
+    const registerServiceWorker = (): void => { navigator.serviceWorker.register('./sw.js?v=1.4.5', { updateViaCache: 'none' }).catch((error) => console.warn('Service worker registration failed.', error)); };
     if (document.readyState === 'complete') registerServiceWorker(); else window.addEventListener('load', registerServiceWorker, { once: true });
   }
 }).catch((error) => {

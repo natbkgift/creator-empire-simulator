@@ -25,6 +25,7 @@ import { renderHq } from '../dist/src/features/hq.js';
 import { renderAnalytics } from '../dist/src/features/analytics.js';
 import { renderPrompts } from '../dist/src/features/prompts.js';
 import { renderSettings } from '../dist/src/features/settings.js';
+import { routeTitle } from '../dist/src/app/navigation.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -132,6 +133,17 @@ test('Today renders mission-first stage rail and Insights hides native CSV input
   assert.ok(hq.includes('aria-current="step"'));
   const insights = renderAnalytics(workspace, new URLSearchParams());
   assert.ok(insights.includes('class="file-input sr-only"'));
+});
+
+test('Today makes an overdue mission explicit and contextual routes keep their page titles', () => {
+  const workspace = createSeedWorkspace();
+  const activeTask = workspace.calendarTasks.find((task) => !task.completed && task.projectId === workspace.focus.activeProjectId);
+  assert.ok(activeTask);
+  activeTask.date = '2000-01-01';
+  const hq = renderHq(workspace);
+  assert.ok(hq.includes('OVERDUE MISSION'));
+  assert.ok(hq.includes('Overdue since 2000-01-01'));
+  assert.equal(routeTitle('settings'), 'Settings');
 });
 
 test('Channels portfolio and Channel Workspace preserve strategy plus 30-day production plan', () => {

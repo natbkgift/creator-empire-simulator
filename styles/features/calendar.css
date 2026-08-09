@@ -50,6 +50,6 @@
   .calendar-task-card { padding:7px; } }
 .page-header p, .panel-title p, .muted, .small-copy, .fake-input span, .idea-copy p, .calendar-task-body span { color: var(--muted) !important; }
 .calendar-grid { gap: 10px; }
-.day-column { background:#fbfdff; border-color: var(--line) !important; }
-.calendar-task-card, .path-card, .video-ticket, .idea-card { background:#fff !important; }
-.gantt-track, .progress-track, .mini-track { background:#edf2f7 !important; }
+.day-column { background:var(--surface-2); color:var(--text); border-color: var(--line) !important; }
+.calendar-task-card, .path-card, .video-ticket, .idea-card { background:var(--surface) !important; color:var(--text); }
+.gantt-track, .progress-track, .mini-track { background:var(--surface-2) !important; }
