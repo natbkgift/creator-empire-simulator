@@ -140,6 +140,7 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       const sourceEvidence = projectSourceEvidence(workspace, project);
       check(Boolean(project.policyChecks.sourcesPresent && sourceEvidence.resolved && sourceEvidence.provenanceComplete), 'Source evidence supports the release check.', 'The sourcesPresent check requires complete project source evidence.');
       check(Boolean(project.policyChecks.claimsClassified && typeof project.factCheckSummary === 'string' && project.factCheckSummary.trim()), 'Claim classification has a fact-check artifact.', 'The claimsClassified check requires a saved fact-check artifact.');
+      check(Boolean(project.policyChecks.originalScript && typeof project.script === 'string' && project.script.trim()), 'Original script has a saved artifact.', 'The originalScript check requires a saved script artifact.');
       break;
     }
     case 'published': check(project.publicationLinks.length > 0, 'Publication URL saved.', 'Add at least one real publication URL.'); break;

@@ -304,6 +304,11 @@ test('release gate does not trust source and claim checkboxes without supporting
   project.factCheckSummary = 123;
   assert.doesNotThrow(() => workflowReadiness(workspace, project, 'scheduled'));
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+
+  project.factCheckSummary = 'Claims classified as documented, reported, disputed, or unsupported.';
+  project.script = '';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /originalScript check requires a saved script artifact/);
 });
 
 test('Published with real URL is Video Complete even while Growth Loop remains pending', () => {
