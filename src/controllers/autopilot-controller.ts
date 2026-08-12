@@ -1,18 +1,29 @@
-import { flushStore, getWorkspace, updateWorkspace } from '../app/store.js';
-import { applyProjectFocus } from '../domain/focus.js';
-import type { AutopilotJob, AutopilotPackage, Channel, SourceRecord, VideoProject } from '../domain/types.js';
-import { escapeHtml, uid } from '../domain/utils.js';
+import { flushStore, hydrateWorkspace } from '../app/store.js';
+import type { AutopilotJob, AutopilotPackage, Workspace } from '../domain/types.js';
+import { escapeHtml } from '../domain/utils.js';
 import { showToast } from '../ui/feedback.js';
-import { simpleChannelRecommendations, thailandThenNowProfile } from '../domain/simple-channels.js';
+import { simpleChannelRecommendations } from '../domain/simple-channels.js';
+import { clearPendingRequest, clearRequestKey, getOrCreateRequestKey, loadPendingRequest, peekRequestKey, requestFingerprint, savePendingRequest, type RequestKeyStorage } from '../domain/request-idempotency.js';
 
 let activeJob: AutopilotJob | null = null;
 let pollTimer = 0;
+
+const requestKeyStorage = (): RequestKeyStorage | undefined => {
+  try { return window.localStorage; } catch { return undefined; }
+};
+
+class RequestError extends Error {
+  constructor(readonly statusCode: number, message: string) { super(message); }
+}
+
+const isDefinitiveRejection = (error: unknown): boolean => error instanceof RequestError
+  && error.statusCode >= 400 && error.statusCode < 500 && ![408, 409, 425, 429].includes(error.statusCode);
 
 const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, { ...init, headers: { ...(init?.body instanceof Blob ? {} : { 'content-type': 'application/json' }), ...(init?.headers ?? {}) } });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error || `${response.status} ${response.statusText}`);
+    throw new RequestError(response.status, body.error || `${response.status} ${response.statusText}`);
   }
   return await response.json() as T;
 };
@@ -92,86 +103,11 @@ const schedulePoll = (): void => {
   }, 2200);
 };
 
-const projectFromPackage = (job: AutopilotJob, pack: AutopilotPackage): void => {
-  updateWorkspace((draft) => {
-    if (draft.projects.some((project) => project.autopilotJobId === job.id)) return;
-    const now = new Date().toISOString();
-    const channelProfile = pack.channel.key === thailandThenNowProfile.key ? thailandThenNowProfile : undefined;
-    if (channelProfile) {
-      draft.channels.forEach((item) => {
-        if (!item.isDemo && item.name !== pack.channel.name && item.role === 'primary') item.role = 'experiment';
-      });
-    }
-    let channel = draft.channels.find((item) => item.name === pack.channel.name && !item.isDemo);
-    if (!channel) {
-      channel = {
-        id: uid('channel'), name: pack.channel.name, handle: `@${pack.channel.key.replace(/[^a-z0-9-]/gi, '').toLowerCase() || 'creator'}`,
-        ideaId: channelProfile?.ideaId ?? draft.ideas[0]?.id ?? pack.channel.key, niche: pack.channel.niche, language: channelProfile?.primaryLanguage ?? job.request.language,
-        role: channelProfile ? 'primary' : draft.channels.some((item) => !item.isDemo) ? 'experiment' : 'primary', health: 80, weeklyHours: 8,
-        weeklyShortsTarget: channelProfile?.weeklyShortsTarget ?? (job.request.format === 'shorts' ? 3 : 1), monthlyLongTarget: channelProfile?.monthlyLongTarget ?? (job.request.format === 'long' ? 2 : 0),
-        audienceCountries: channelProfile ? [...channelProfile.audienceCountries] : ['TH'], createdAt: now,
-        blueprint: {
-          concept: pack.channel.niche, nameOptions: [pack.channel.name], promise: pack.channel.promise,
-          targetAudience: channelProfile?.targetAudience ?? 'ผู้ชมไทยที่ต้องการเนื้อหากระชับและนำไปใช้ได้', viewerDesire: channelProfile?.viewerDesire ?? 'เข้าใจเรื่องยากได้เร็ว',
-          pillars: channelProfile ? [...channelProfile.pillars] : [pack.channel.niche, 'อธิบายให้เห็นภาพ', 'ขั้นตอนนำไปใช้'], visualIdentity: channelProfile?.visualIdentity ?? 'Light Studio, clean infographic, 9:16',
-          narrationPersonality: channelProfile?.narrationPersonality ?? 'ชัดเจน เป็นธรรมชาติ น่าเชื่อถือ', languageStrategy: channelProfile?.languageStrategy ?? (job.request.language === 'th' ? 'Thai-first' : 'English-first'),
-          voice: channelProfile ? 'Thai documentary host; neutral international English for English editions' : 'Warm expert', shortsStrategy: channelProfile?.shortsStrategy ?? 'Strong two-second hook and one payoff', longFormStrategy: channelProfile?.longFormStrategy ?? 'Evidence-led chapter structure',
-          plan30Days: channelProfile ? [
-            { day: 1, title: pack.contentPlan.title, format: job.request.format, objective: pack.contentPlan.angle, hook: pack.contentPlan.hook },
-            { day: 4, title: 'พัทยาเมื่อก่อน vs วันนี้ใน 60 วินาที', format: 'shorts', objective: 'Thai-first archive comparison', hook: 'ภาพเดียวกัน แต่คนละยุค' },
-            { day: 8, title: 'Pattaya Then and Now in 60 Seconds', format: 'shorts', objective: 'English edition from verified research', hook: 'Same place, a completely different Pattaya' },
-            { day: 15, title: 'พัทยาเปลี่ยนไปอย่างไร และอะไรยังเหมือนเดิม', format: 'long', objective: 'Thai documentary timeline', hook: 'จากเมืองชายทะเลสู่เมืองท่องเที่ยวระดับโลก' },
-            { day: 22, title: 'How Pattaya Changed — and What Did Not', format: 'long', objective: 'English documentary edition', hook: 'The archive tells a more complicated story' },
-          ] : [{ day: 1, title: pack.contentPlan.title, format: job.request.format, objective: pack.contentPlan.angle, hook: pack.contentPlan.hook }],
-          experiment90Days: channelProfile ? ['ทดสอบคู่ภาพ archive/current 12 คลิป', 'เปรียบเทียบ retention ฉบับไทยและ English edition', 'ขยายจากพัทยาไปเมืองท่องเที่ยวไทยเมื่อ source coverage พร้อม'] : ['ทดสอบหัวข้อ 12 คลิป', 'วัด retention และความตั้งใจดูต่อ'], monetizationPaths: [],
-          risks: [...(channelProfile?.risks ?? []), ...pack.research.risks], originalityStrategy: 'Research-led original scripts and transformed visuals',
-          factCheckWorkflow: ['Research with sources', 'Terra final fact-check', 'Human review before upload'],
-          sourcePolicy: channelProfile?.sourcePolicy ?? 'Use primary or authoritative sources and preserve URLs', decisionCriteria: [`AI fit ${pack.channel.aiFitScore}%`, 'Thai-first with separate English editions', 'Supports Shorts and Long-form', 'Archive rights and dates verified before use'],
-        },
-      } satisfies Channel;
-      draft.channels.push(channel);
-    } else if (channelProfile) {
-      channel.ideaId = channelProfile.ideaId;
-      channel.language = channelProfile.primaryLanguage;
-      channel.role = 'primary';
-      channel.weeklyShortsTarget = channelProfile.weeklyShortsTarget;
-      channel.monthlyLongTarget = channelProfile.monthlyLongTarget;
-      channel.audienceCountries = [...channelProfile.audienceCountries];
-      channel.blueprint.languageStrategy = channelProfile.languageStrategy;
-      channel.blueprint.shortsStrategy = channelProfile.shortsStrategy;
-      channel.blueprint.longFormStrategy = channelProfile.longFormStrategy;
-      channel.blueprint.sourcePolicy = channelProfile.sourcePolicy;
-    }
-    const sourceIds: string[] = [];
-    pack.research.sources.forEach((item) => {
-      const source: SourceRecord = { id: uid('source'), projectId: '', title: item.title, url: item.url, publisher: item.publisher, accessedAt: now, claimType: 'documented', notes: item.notes };
-      draft.sources.push(source); sourceIds.push(source.id);
-    });
-    const date = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-    const projectId = uid('project');
-    sourceIds.forEach((sourceId) => { const source = draft.sources.find((item) => item.id === sourceId); if (source) source.projectId = projectId; });
-    const project: VideoProject = {
-      id: projectId, title: pack.metadata.title, channelId: channel.id, ideaId: channel.ideaId, series: 'Autopilot', language: job.request.language,
-      platforms: ['youtube'], format: job.request.format, targetDurationSeconds: job.request.durationSeconds, deadline: date,
-      publishAt: `${date}T19:00:00`, owner: draft.name, estimatedMinutes: 90, budgetThb: 0, creditEstimateLow: 0, creditEstimateHigh: 0,
-      actualCredits: 0, status: 'assets-needed', growthLoopStatus: 'pending', sourceIds, researchSummary: pack.research.summary,
-      factCheckSummary: pack.script.factCheckSummary, scriptVersion: 1, script: pack.script.narration, hook: pack.contentPlan.hook,
-      storyboard: pack.handoff.storyboard, assetPrompts: pack.handoff.assetPrompts, capcutBrief: pack.handoff.capcutBrief,
-      promptVersions: [], thumbnailVersions: [pack.metadata.title, pack.metadata.thumbnailText], publicationLinks: [], lessonsLearned: '',
-      analyticsPostmortem: '', repurposingPlan: pack.handoff.repurposingPlan,
-      workflowEvents: [{ id: uid('event'), at: now, type: 'prompt-applied', note: 'Autopilot package approved after one human review' }],
-      policyChecks: {}, riskLevel: pack.research.risks.length ? 'review' : 'low', createdAt: now, updatedAt: now,
-      autopilotJobId: job.id, autopilotPackage: pack,
-    };
-    draft.projects.push(project);
-    applyProjectFocus(draft, project.id);
-  });
-};
-
 const approveJob = async (): Promise<void> => {
   if (!activeJob?.package) return;
-  const payload = await fetchJson<{ job: AutopilotJob }>(`/api/autopilot/jobs/${encodeURIComponent(activeJob.id)}/approve`, { method: 'POST', body: '{}' });
-  projectFromPackage(payload.job, payload.job.package as AutopilotPackage);
+  await flushStore();
+  const payload = await fetchJson<{ job: AutopilotJob; workspace: Workspace }>(`/api/autopilot/jobs/${encodeURIComponent(activeJob.id)}/approve`, { method: 'POST', body: '{}' });
+  hydrateWorkspace(payload.workspace);
   renderJobState(payload.job);
   showToast('อนุมัติและบันทึกชุดวิดีโอแล้ว', 'success');
 };
@@ -211,13 +147,33 @@ const refreshYoutubeStatus = async (): Promise<void> => {
 
 const uploadYoutube = async (): Promise<void> => {
   const file = document.querySelector<HTMLInputElement>('#youtube-video-file')?.files?.[0];
-  if (!file || !activeJob?.package) { showToast('เลือกไฟล์ MP4 ก่อน', 'warning'); return; }
+  if (!activeJob?.package) return;
+  const requestScope = `youtube-upload:${activeJob.id}`;
+  const storage = requestKeyStorage();
+  const idempotencyKey = getOrCreateRequestKey(storage, requestScope);
+  const pending = loadPendingRequest<{ assetId: string; jobId: string }>(storage, requestScope);
+  let assetId = pending?.jobId === activeJob.id ? pending.assetId : '';
+  if (!assetId && !file) { showToast('เลือกไฟล์ MP4 ก่อน', 'warning'); return; }
   const target = document.querySelector<HTMLElement>('#youtube-state');
-  if (target) target.innerHTML = '<p>กำลังส่งไฟล์ไปยังเซิร์ฟเวอร์อย่างปลอดภัย…</p>';
-  const assetResponse = await fetch('/api/video-assets', { method: 'POST', headers: { 'content-type': 'video/mp4', 'x-filename': encodeURIComponent(file.name), 'x-project-id': activeJob.id }, body: file });
-  if (!assetResponse.ok) throw new Error((await assetResponse.json().catch(() => ({})) as { error?: string }).error || 'อัปโหลดไฟล์ชั่วคราวไม่สำเร็จ');
-  const asset = await assetResponse.json() as { asset: { id: string } };
-  await fetchJson('/api/youtube/uploads', { method: 'POST', body: JSON.stringify({ assetId: asset.asset.id, jobId: activeJob.id, metadata: { ...activeJob.package.metadata, containsSyntheticMedia: true } }) });
+  if (!assetId && file) {
+    if (target) target.innerHTML = '<p>กำลังส่งไฟล์ไปยังเซิร์ฟเวอร์อย่างปลอดภัย…</p>';
+    const assetResponse = await fetch('/api/video-assets', { method: 'POST', headers: { 'content-type': 'video/mp4', 'x-filename': encodeURIComponent(file.name), 'x-project-id': activeJob.id }, body: file });
+    if (!assetResponse.ok) throw new Error((await assetResponse.json().catch(() => ({})) as { error?: string }).error || 'อัปโหลดไฟล์ชั่วคราวไม่สำเร็จ');
+    const asset = await assetResponse.json() as { asset: { id: string } };
+    assetId = asset.asset.id;
+    savePendingRequest(storage, requestScope, { assetId, jobId: activeJob.id });
+  }
+  try {
+    await fetchJson('/api/youtube/uploads', { method: 'POST', body: JSON.stringify({ idempotencyKey, assetId, jobId: activeJob.id, metadata: { ...activeJob.package.metadata, containsSyntheticMedia: true } }) });
+  } catch (error) {
+    if (isDefinitiveRejection(error)) {
+      clearPendingRequest(storage, requestScope);
+      clearRequestKey(storage, requestScope);
+    }
+    throw error;
+  }
+  clearPendingRequest(storage, requestScope);
+  clearRequestKey(storage, requestScope);
   await refreshYoutubeStatus();
 };
 
@@ -230,9 +186,26 @@ const submitAutopilot = async (form: HTMLFormElement): Promise<void> => {
     // Autopilot executes in a background worker, so persist schema-v5 AI rates and
     // budget settings before it reads the server-side workspace snapshot.
     await flushStore();
-    const payload = await fetchJson<{ job: AutopilotJob }>('/api/autopilot/jobs', {
-      method: 'POST', body: JSON.stringify({ topic: data.get('topic'), format: data.get('format'), durationSeconds: Number(data.get('durationSeconds')), language: data.get('language'), channel: selected }),
-    });
+    const storage = requestKeyStorage();
+    const channel = { key: selected.key, name: selected.name, niche: selected.niche, promise: selected.promise, aiFitScore: selected.aiFitScore };
+    const request = { topic: data.get('topic'), format: data.get('format'), durationSeconds: Number(data.get('durationSeconds')), language: data.get('language'), channel };
+    const requestScope = `autopilot-create:${requestFingerprint(request)}`;
+    const idempotencyKey = getOrCreateRequestKey(storage, requestScope);
+    savePendingRequest(storage, requestScope, request);
+    let payload: { job: AutopilotJob };
+    try {
+      payload = await fetchJson<{ job: AutopilotJob }>('/api/autopilot/jobs', {
+        method: 'POST', body: JSON.stringify({ idempotencyKey, ...request }),
+      });
+    } catch (error) {
+      if (isDefinitiveRejection(error)) {
+        clearPendingRequest(storage, requestScope);
+        clearRequestKey(storage, requestScope);
+      }
+      throw error;
+    }
+    clearPendingRequest(storage, requestScope);
+    clearRequestKey(storage, requestScope);
     rememberJob(payload.job.id); renderJobState(payload.job); schedulePoll();
     document.querySelector('#autopilot-state')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
@@ -248,7 +221,16 @@ const loadExistingJob = async (): Promise<void> => {
     const payload = saved
       ? await fetchJson<{ job: AutopilotJob }>(`/api/autopilot/jobs/${encodeURIComponent(saved)}`)
       : await fetchJson<{ jobs: AutopilotJob[] }>('/api/autopilot/jobs?limit=1').then((result) => ({ job: result.jobs[0] }));
-    if (payload.job) { rememberJob(payload.job.id); renderJobState(payload.job); schedulePoll(); }
+    if (payload.job) {
+      const storage = requestKeyStorage();
+      const requestScope = `autopilot-create:${requestFingerprint(payload.job.request)}`;
+      const pendingKey = peekRequestKey(storage, requestScope);
+      if (pendingKey && payload.job.idempotencyKey === pendingKey) {
+        clearPendingRequest(storage, requestScope);
+        clearRequestKey(storage, requestScope);
+      }
+      rememberJob(payload.job.id); renderJobState(payload.job); schedulePoll();
+    }
   } catch { /* an empty or expired job list is a normal first-run state */ }
 };
 

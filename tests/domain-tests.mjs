@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { seedIdeas, ideaCategories } from '../dist/src/seed/ideas.js';
 import { createSeedWorkspace } from '../dist/src/seed/demo.js';
 import { calculateScore, compareIdeaLanguages } from '../dist/src/domain/scoring.js';
@@ -14,6 +15,7 @@ import {
 } from '../dist/src/domain/workflow.js';
 import { migrateWorkspace } from '../dist/src/domain/migration.js';
 import { aiWorkflowCoverage, promptResponseContracts } from '../dist/src/domain/ai-contracts.js';
+import { clearPendingRequest, clearRequestKey, getOrCreateRequestKey, loadPendingRequest, peekRequestKey, requestFingerprint, savePendingRequest } from '../dist/src/domain/request-idempotency.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -23,6 +25,78 @@ const wojtekProjectId = 'project_wojtek_short';
 const aiProjectId = 'project_ai_boring_task';
 
 const migratedSeed = () => migrateWorkspace(createSeedWorkspace());
+
+test('request keys survive ambiguous retries and clear only after reconciliation', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  };
+  const first = getOrCreateRequestKey(storage, 'autopilot-create', () => 'first-uuid');
+  const repeated = getOrCreateRequestKey(storage, 'autopilot-create', () => 'second-uuid');
+  assert.equal(first, repeated);
+  assert.equal(peekRequestKey(storage, 'autopilot-create'), first);
+  clearRequestKey(storage, 'autopilot-create');
+  assert.equal(peekRequestKey(storage, 'autopilot-create'), undefined);
+  assert.notEqual(getOrCreateRequestKey(storage, 'autopilot-create', () => 'third-uuid'), first);
+});
+
+test('pending provider request retains the exact uploaded asset across response loss', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  };
+  savePendingRequest(storage, 'youtube-upload:job-1', { assetId: 'asset-1', jobId: 'job-1' });
+  assert.deepEqual(loadPendingRequest(storage, 'youtube-upload:job-1'), { assetId: 'asset-1', jobId: 'job-1' });
+  clearPendingRequest(storage, 'youtube-upload:job-1');
+  assert.equal(loadPendingRequest(storage, 'youtube-upload:job-1'), undefined);
+});
+
+test('provider request scopes are stable per payload and isolated across payloads', () => {
+  assert.equal(requestFingerprint({ topic: 'A', format: 'shorts' }), requestFingerprint({ topic: 'A', format: 'shorts' }));
+  assert.equal(requestFingerprint({ topic: 'A', channel: { name: 'FlowBiz', key: 'business' } }), requestFingerprint({ channel: { key: 'business', name: 'FlowBiz' }, topic: 'A' }));
+  assert.notEqual(requestFingerprint({ topic: 'A', format: 'shorts' }), requestFingerprint({ topic: 'B', format: 'shorts' }));
+});
+
+test('authoritative approval hydration preserves server identity without queueing a write', async () => {
+  const { flushStore, getWorkspace, hydrateWorkspace } = await import('../dist/src/app/store.js');
+  const authoritative = migratedSeed();
+  authoritative.revision = 41;
+  authoritative.updatedAt = '2026-08-11T22:00:00.000Z';
+  hydrateWorkspace(authoritative);
+  await flushStore();
+  assert.equal(getWorkspace().revision, 41);
+  assert.equal(getWorkspace().updatedAt, '2026-08-11T22:00:00.000Z');
+});
+
+test('approval waits for queued workspace saves before requesting server materialization', () => {
+  const source = readFileSync(new URL('../src/controllers/autopilot-controller.ts', import.meta.url), 'utf8');
+  const approval = source.slice(source.indexOf('const approveJob'), source.indexOf('const refreshYoutubeStatus'));
+  assert.ok(approval.indexOf('await flushStore()') > 0);
+  assert.ok(approval.indexOf('await flushStore()') < approval.indexOf('/approve'));
+});
+
+test('provider request identities persist across tabs and reset after definitive rejection', () => {
+  const source = readFileSync(new URL('../src/controllers/autopilot-controller.ts', import.meta.url), 'utf8');
+  assert.match(source, /window\.localStorage/);
+  assert.match(source, /isDefinitiveRejection/);
+  assert.match(source, /const channel = \{ key: selected\.key, name: selected\.name, niche: selected\.niche, promise: selected\.promise, aiFitScore: selected\.aiFitScore \}/);
+  assert.match(source, /clearPendingRequest\(storage, requestScope\)/);
+});
+
+test('workspace persistence surfaces CAS conflicts and keeps SQLite authoritative on revision ties', () => {
+  const source = readFileSync(new URL('../src/db/storage.ts', import.meta.url), 'utf8');
+  const storeSource = readFileSync(new URL('../src/app/store.ts', import.meta.url), 'utf8');
+  assert.match(source, /error instanceof ServerResponseError/);
+  assert.match(source, /if \(ar !== br\) return ar > br \? a : b;\s*return a;/);
+  assert.match(source, /Could not reconcile IndexedDB into SQLite[\s\S]*error instanceof ServerResponseError[\s\S]*throw error/);
+  assert.match(source, /expectedRevision/);
+  assert.doesNotMatch(source, /return workspace;\s*\n\s*}\s*;\s*\n\s*export const getRecoveryHistory/);
+  assert.doesNotMatch(storeSource, /saveQueue\s*=\s*saveQueue\.catch/);
+});
 
 test('seed library contains 5 categories and 50 ideas', () => {
   assert.equal(ideaCategories.length, 5); assert.equal(seedIdeas.length, 50);

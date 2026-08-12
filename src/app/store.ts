@@ -18,7 +18,7 @@ const notify = (): void => { listeners.forEach((listener) => listener(workspace)
 
 const queueSave = (): void => {
   const snapshot = deepClone(workspace);
-  saveQueue = saveQueue.catch(() => undefined).then(async () => {
+  saveQueue = saveQueue.then(async () => {
     const saved = await saveWorkspaceRecord(snapshot);
     if ((saved.revision ?? 0) > (workspace.revision ?? 0)) workspace.revision = saved.revision;
   });
@@ -43,6 +43,12 @@ export const initializeStore = async (): Promise<Workspace> => {
 
 export const getWorkspace = (): Workspace => workspace;
 export const subscribe = (listener: StoreListener): (() => void) => { listeners.add(listener); return () => listeners.delete(listener); };
+
+export const hydrateWorkspace = (next: Workspace): void => {
+  workspace = migrateWorkspace(deepClone(next));
+  saveQueue = Promise.resolve();
+  notify();
+};
 
 export const replaceWorkspace = (next: Workspace): void => {
   workspace = migrateWorkspace(deepClone(next));

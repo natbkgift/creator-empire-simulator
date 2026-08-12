@@ -92,7 +92,7 @@ export interface AutopilotPackage {
 export interface AutopilotJob {
   id: string; status: AutopilotJobStatus; stage: AutopilotStepKind | 'ready'; progress: number;
   request: AutopilotRequest; steps: AutopilotStep[]; package?: AutopilotPackage; error?: string;
-  createdAt: string; updatedAt: string; approvedAt?: string;
+  createdAt: string; updatedAt: string; approvedAt?: string; idempotencyKey?: string;
 }
 
 export interface VideoAsset {

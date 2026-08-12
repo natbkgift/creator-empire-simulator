@@ -17,6 +17,7 @@ import io
 import json
 import mimetypes
 import os
+import re
 import secrets
 import sqlite3
 import sys
@@ -159,6 +160,7 @@ def ensure_db() -> None:
         conn.execute("""
         create table if not exists autopilot_jobs (
           id text primary key,
+          idempotency_key text,
           status text not null,
           stage text not null,
           progress integer not null default 0,
@@ -171,6 +173,8 @@ def ensure_db() -> None:
           approved_at text
         )
         """)
+        ensure_column(conn, "autopilot_jobs", "idempotency_key", "text")
+        conn.execute("create unique index if not exists idx_autopilot_jobs_idempotency on autopilot_jobs(idempotency_key) where idempotency_key is not null")
         conn.execute("""
         create table if not exists autopilot_steps (
           id integer primary key autoincrement,
@@ -221,6 +225,7 @@ def ensure_db() -> None:
         conn.execute("""
         create table if not exists youtube_uploads (
           id text primary key,
+          idempotency_key text,
           asset_id text not null,
           job_id text,
           status text not null,
@@ -237,7 +242,9 @@ def ensure_db() -> None:
         """)
         # Additive migration for releases created before uploads were scoped to
         # the Autopilot package that owns the MP4 handoff.
+        ensure_column(conn, "youtube_uploads", "idempotency_key", "text")
         ensure_column(conn, "youtube_uploads", "job_id", "text")
+        conn.execute("create unique index if not exists idx_youtube_uploads_idempotency on youtube_uploads(idempotency_key) where idempotency_key is not null")
         conn.execute("create index if not exists idx_youtube_uploads_job_created on youtube_uploads(job_id,created_at desc)")
         # v1.2 persisted plaintext provider keys. Secure-delete rows before removing the table.
         legacy_secret_table = table_exists(conn, "ai_secrets")
@@ -349,8 +356,11 @@ def db_storage_meta() -> dict[str, Any]:
 
 
 def normalize_revision(workspace: dict[str, Any], current_revision: int) -> int:
-    requested = int(workspace.get("revision", 0) or 0)
-    return max(current_revision + 1, requested)
+    return current_revision + 1
+
+
+class WorkspaceConflict(ValueError):
+    pass
 
 
 def save_workspace(payload: dict[str, Any]) -> dict[str, Any]:
@@ -365,6 +375,9 @@ def save_workspace(payload: dict[str, Any]) -> dict[str, Any]:
         conn.execute("begin immediate")
         row = workspace_row(conn)
         current_revision = int(row[2]) if row else 0
+        expected_revision = int(payload.get("expectedRevision", -1))
+        if expected_revision != current_revision:
+            raise WorkspaceConflict(f"Stale workspace revision {expected_revision}; current revision is {current_revision}")
         revision = normalize_revision(workspace, current_revision)
         workspace = dict(workspace)
         workspace["revision"] = revision
@@ -587,38 +600,42 @@ def enforce_budget(provider: str, settings: dict[str, Any], model: str = "") -> 
         raise RuntimeError(f"Monthly AI budget reached (${monthly:.2f})")
 
 
-def post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float, attempts: int = 3) -> dict[str, Any]:
-    last_error: Exception | None = None
-    for attempt in range(attempts):
-        request = urllib.request.Request(
-            url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json", **headers},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            # Do not persist provider response bodies: they may echo user content.
-            exc.read()
-            last_error = RuntimeError(f"Provider HTTP {exc.code}: request rejected")
-            if exc.code not in {408, 409, 429, 500, 502, 503, 504} or attempt == attempts - 1:
-                raise last_error from exc
-            retry_after = exc.headers.get("Retry-After", "") if exc.headers else ""
-            try:
-                retry_delay = max(0.0, float(retry_after))
-            except ValueError:
-                retry_delay = 0.0
-            fallback_delay = 15.0 if exc.code == 429 else 0.75 * (2**attempt)
-            time.sleep(min(30.0, max(retry_delay, fallback_delay)))
-            continue
-        except (urllib.error.URLError, TimeoutError) as exc:
-            last_error = RuntimeError(f"Network error: {type(exc).__name__}")
-            if attempt == attempts - 1:
-                raise last_error from exc
-        time.sleep(0.75 * (2**attempt))
-    raise last_error or RuntimeError("AI request failed")
+class ProviderCallError(RuntimeError):
+    def __init__(self, message: str, model_sequence: str, input_tokens: int, output_tokens: int, search_queries: int) -> None:
+        super().__init__(message)
+        self.model_sequence = model_sequence
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.search_queries = search_queries
+
+
+def _provider_http_requires_reconciliation(status_code: int) -> bool:
+    return status_code in {408, 409, 425, 429} or status_code >= 500
+
+
+def post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json", **headers},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            parsed = json.loads(response.read().decode("utf-8"))
+            if not isinstance(parsed, dict):
+                raise ValueError("provider response envelope must be an object")
+            return parsed
+    except urllib.error.HTTPError as exc:
+        # Do not persist provider response bodies: they may echo user content.
+        exc.read()
+        if _provider_http_requires_reconciliation(exc.code):
+            raise RuntimeError(f"Provider HTTP {exc.code}: request outcome requires reconciliation before retry") from exc
+        raise RuntimeError(f"Provider HTTP {exc.code}: request rejected") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Network error: {type(exc).__name__}; provider request outcome is ambiguous") from exc
+    except Exception as exc:  # response loss, decode failure, or malformed provider envelope
+        raise RuntimeError(f"Provider response {type(exc).__name__}; reconciliation is required before retry") from exc
 
 
 def openai_response_schema(prompt_type: str) -> dict[str, Any] | None:
@@ -656,7 +673,7 @@ def call_openai(
     timeout: float,
     prompt_type: str = "",
     reasoning_effort: str = "low",
-) -> tuple[str, int, int, int]:
+) -> tuple[str, int, int, int, str]:
     request_payload: dict[str, Any] = {
         "model": model,
         "input": prompt,
@@ -683,16 +700,26 @@ def call_openai(
     total_input_tokens = 0
     total_output_tokens = 0
     total_search_queries = 0
+    resolved_models: list[str] = []
     repair_instruction = ""
     last_reason = "provider returned no valid structured text"
     for response_attempt in range(2):
         request_payload["input"] = prompt + repair_instruction
-        data = post_json(
-            "https://api.openai.com/v1/responses",
-            {"Authorization": f"Bearer {api_key}"},
-            request_payload,
-            timeout,
-        )
+        try:
+            data = post_json(
+                "https://api.openai.com/v1/responses",
+                {"Authorization": f"Bearer {api_key}"},
+                request_payload,
+                timeout,
+            )
+        except Exception as exc:
+            if resolved_models:
+                raise ProviderCallError(str(exc), " -> ".join(resolved_models), total_input_tokens, total_output_tokens, total_search_queries) from exc
+            raise
+        resolved_model = str(data.get("model") or "").strip()
+        if not resolved_model:
+            raise ProviderCallError("OpenAI response omitted the exact model identity; reconciliation is required before retry", " -> ".join(resolved_models), total_input_tokens, total_output_tokens, total_search_queries)
+        resolved_models.append(resolved_model)
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
         total_input_tokens += int(usage.get("input_tokens", 0) or 0)
         total_output_tokens += int(usage.get("output_tokens", 0) or 0)
@@ -705,7 +732,7 @@ def call_openai(
                     "Keep arrays concise, finish every sentence, and close every object and array."
                 )
                 continue
-            raise RuntimeError(f"OpenAI response {last_reason}")
+            raise ProviderCallError(f"OpenAI response {last_reason}", " -> ".join(resolved_models), total_input_tokens, total_output_tokens, total_search_queries)
         chunks: list[str] = []
         if isinstance(data.get("output_text"), str):
             chunks.append(data["output_text"])
@@ -716,14 +743,14 @@ def call_openai(
                 total_search_queries += 1
             for content in item.get("content", []) if isinstance(item.get("content"), list) else []:
                 if isinstance(content, dict) and content.get("type") == "refusal":
-                    raise RuntimeError("OpenAI declined this request")
+                    raise ProviderCallError("OpenAI declined this request", " -> ".join(resolved_models), total_input_tokens, total_output_tokens, total_search_queries)
                 if isinstance(content, dict) and isinstance(content.get("text"), str):
                     chunks.append(content["text"])
         text = "\n".join(dict.fromkeys(filter(None, chunks))).strip()
         if text:
             try:
                 json.loads(text)
-                return text, total_input_tokens, total_output_tokens, total_search_queries
+                return text, total_input_tokens, total_output_tokens, total_search_queries, " -> ".join(resolved_models)
             except json.JSONDecodeError:
                 last_reason = "invalid structured JSON"
         if response_attempt == 0:
@@ -732,7 +759,7 @@ def call_openai(
                 "Keep arrays concise, finish every sentence, and close every object and array."
             )
             continue
-    raise RuntimeError(f"OpenAI produced {last_reason} after one structured repair")
+    raise ProviderCallError(f"OpenAI produced {last_reason} after one structured repair", " -> ".join(resolved_models), total_input_tokens, total_output_tokens, total_search_queries)
 
 
 def gemini_response_schema(prompt_type: str) -> dict[str, Any] | None:
@@ -776,7 +803,7 @@ def gemini_response_schema(prompt_type: str) -> dict[str, Any] | None:
     return {"type": "object", "properties": properties, "required": list(properties)}
 
 
-def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, timeout: float, prompt_type: str = "", thinking_level: str = "low") -> tuple[str, int, int, int]:
+def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, timeout: float, prompt_type: str = "", thinking_level: str = "low") -> tuple[str, int, int, int, str]:
     encoded_model = urllib.parse.quote(model, safe="")
     generation_config: dict[str, Any] = {
         "maxOutputTokens": max_output_tokens,
@@ -792,6 +819,7 @@ def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, t
     input_tokens = 0
     output_tokens = 0
     search_queries = 0
+    resolved_models: list[str] = []
     retry_instruction = ""
     for response_attempt in range(2):
         request_payload: dict[str, Any] = {
@@ -800,12 +828,21 @@ def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, t
         }
         if model.startswith("gemini-3") and prompt_type in RESEARCH_PROMPT_TYPES:
             request_payload["tools"] = [{"google_search": {}}]
-        data = post_json(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{encoded_model}:generateContent",
-            {"x-goog-api-key": api_key},
-            request_payload,
-            timeout,
-        )
+        try:
+            data = post_json(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{encoded_model}:generateContent",
+                {"x-goog-api-key": api_key},
+                request_payload,
+                timeout,
+            )
+        except Exception as exc:
+            if resolved_models:
+                raise ProviderCallError(str(exc), " -> ".join(resolved_models), input_tokens, output_tokens, search_queries) from exc
+            raise
+        resolved_model = str(data.get("modelVersion") or "").strip()
+        if not resolved_model:
+            raise ProviderCallError("Gemini response omitted the exact model version; reconciliation is required before retry", " -> ".join(resolved_models), input_tokens, output_tokens, search_queries)
+        resolved_models.append(resolved_model)
         parts: list[str] = []
         for candidate in data.get("candidates", []) if isinstance(data.get("candidates"), list) else []:
             content = candidate.get("content", {}) if isinstance(candidate, dict) else {}
@@ -822,7 +859,7 @@ def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, t
         if result:
             try:
                 json.loads(result)
-                return result, input_tokens, output_tokens, search_queries
+                return result, input_tokens, output_tokens, search_queries, " -> ".join(resolved_models)
             except json.JSONDecodeError as exc:
                 if response_attempt == 0:
                     retry_instruction = (
@@ -830,7 +867,7 @@ def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, t
                         "use at most one item per array, keep each non-script string under 160 characters, and close every object and array."
                     )
                     continue
-                raise RuntimeError("Gemini produced incomplete structured JSON after one compact retry") from exc
+                raise ProviderCallError("Gemini produced incomplete structured JSON after one compact retry", " -> ".join(resolved_models), input_tokens, output_tokens, search_queries) from exc
         feedback = data.get("promptFeedback") if isinstance(data.get("promptFeedback"), dict) else {}
         candidate_reasons = [
             str(item.get("finishReason") or item.get("finishMessage") or "").strip()
@@ -840,8 +877,8 @@ def call_gemini(prompt: str, model: str, api_key: str, max_output_tokens: int, t
         if response_attempt == 0 and reason.upper() == "RECITATION":
             retry_instruction = "\n\nWrite an original paraphrase. Do not reproduce memorized or copyrighted wording."
             continue
-        raise RuntimeError(f"Gemini response unavailable: {reason}")
-    raise RuntimeError("Gemini response unavailable after a safe paraphrase retry")
+        raise ProviderCallError(f"Gemini response unavailable: {reason}", " -> ".join(resolved_models), input_tokens, output_tokens, search_queries)
+    raise ProviderCallError("Gemini response unavailable after a safe paraphrase retry", " -> ".join(resolved_models), input_tokens, output_tokens, search_queries)
 
 
 def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
@@ -882,16 +919,17 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
         output_tokens = 0
         search_queries = 0
         estimated_cost = 0.0
+        resolved_model = ""
         try:
             if provider == "openai":
-                text, input_tokens, output_tokens, search_queries = call_openai(
+                text, input_tokens, output_tokens, search_queries, resolved_model = call_openai(
                     prompt, model, api_key, max_tokens, timeout, prompt_type, reasoning_effort
                 )
             else:
                 thinking_level = str(settings.get("geminiThinkingLevel") or "low").strip().lower()
                 if thinking_level not in {"minimal", "low", "medium", "high"}:
                     thinking_level = "low"
-                text, input_tokens, output_tokens, search_queries = call_gemini(prompt, model, api_key, max_tokens, timeout, prompt_type, thinking_level)
+                text, input_tokens, output_tokens, search_queries, resolved_model = call_gemini(prompt, model, api_key, max_tokens, timeout, prompt_type, thinking_level)
             estimated_cost = estimate_cost(provider, input_tokens, output_tokens, settings, search_queries, model)
             daily, monthly = budget_limits(settings)
             if daily and ai_spend("day") + estimated_cost > daily:
@@ -907,7 +945,8 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
             return {
                 "ok": True,
                 "provider": provider,
-                "model": model,
+                "model": resolved_model,
+                "requestedModel": model,
                 "modelTier": model_tier,
                 "reasoningEffort": reasoning_effort,
                 "promptType": prompt_type or None,
@@ -919,6 +958,14 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
                 "keySource": key_source,
                 "createdAt": now_iso(),
             }
+        except ProviderCallError as exc:
+            resolved_model = exc.model_sequence
+            input_tokens = exc.input_tokens
+            output_tokens = exc.output_tokens
+            search_queries = exc.search_queries
+            estimated_cost = estimate_cost(provider, input_tokens, output_tokens, settings, search_queries, model)
+            error = str(exc)[:300]
+            raise
         except Exception as exc:  # noqa: BLE001
             error = str(exc)[:300]
             raise
@@ -927,7 +974,7 @@ def ai_generate(payload: dict[str, Any]) -> dict[str, Any]:
                 conn.execute(
                     "insert into ai_runs(provider,model,created_at,prompt_chars,response_chars,input_tokens,output_tokens,search_queries,estimated_cost_usd,ok,error) "
                     "values(?,?,?,?,?,?,?,?,?,?,?)",
-                    (provider, model, now_iso(), len(prompt), len(text), input_tokens, output_tokens, search_queries, estimated_cost, ok, error),
+                    (provider, resolved_model, now_iso(), len(prompt), len(text), input_tokens, output_tokens, search_queries, estimated_cost, ok, error),
                 )
 
 
@@ -945,6 +992,10 @@ def _json_object(value: str | None) -> dict[str, Any]:
         return {}
     parsed = json.loads(value)
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _dict_object(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _autopilot_spec(request_payload: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
@@ -989,7 +1040,7 @@ def _step_dict(row: tuple[Any, ...]) -> dict[str, Any]:
 def _job_payload(job_id: str) -> dict[str, Any]:
     with db_conn() as conn:
         row = conn.execute(
-            "select id,status,stage,progress,request_json,package_json,error,created_at,updated_at,approved_at "
+            "select id,status,stage,progress,request_json,package_json,error,created_at,updated_at,approved_at,idempotency_key "
             "from autopilot_jobs where id=?", (job_id,)
         ).fetchone()
         if not row:
@@ -1002,10 +1053,16 @@ def _job_payload(job_id: str) -> dict[str, Any]:
         "id": row[0], "status": row[1], "stage": row[2], "progress": int(row[3]),
         "request": _json_object(row[4]), "package": _json_object(row[5]) or None, "error": row[6],
         "steps": [_step_dict(item) for item in step_rows], "createdAt": row[7], "updatedAt": row[8], "approvedAt": row[9],
+        "idempotencyKey": row[10],
     }
 
 
 def create_autopilot_job(payload: dict[str, Any]) -> dict[str, Any]:
+    idempotency_key = str(payload.get("idempotencyKey") or "").strip()
+    if not idempotency_key:
+        raise ValueError("idempotencyKey is required for Autopilot creation")
+    if len(idempotency_key) > 128 or not all(char.isalnum() or char in "-_.:" for char in idempotency_key):
+        raise ValueError("idempotencyKey must contain at most 128 safe characters")
     topic = str(payload.get("topic") or "").strip()
     if len(topic) < 3 or len(topic) > 500:
         raise ValueError("topic must contain 3 to 500 characters")
@@ -1025,19 +1082,33 @@ def create_autopilot_job(payload: dict[str, Any]) -> dict[str, Any]:
         "aiFitScore": max(0, min(100, int(raw_channel.get("aiFitScore") or 90))),
     }
     request_payload = {"topic": topic, "format": format_value, "durationSeconds": duration, "language": language, "channel": channel}
+    request_json = canonical_json(request_payload)
     job_id = f"job_{uuid.uuid4().hex}"
     created = now_iso()
+    created_new = False
     with db_conn() as conn:
-        conn.execute(
-            "insert into autopilot_jobs(id,status,stage,progress,request_json,created_at,updated_at) values(?,?,?,?,?,?,?)",
-            (job_id, "queued", "research", 0, canonical_json(request_payload), created, created),
-        )
-        for index, (kind, prompt_type, tier) in enumerate(_autopilot_spec(request_payload)):
+        conn.execute("begin immediate")
+        existing = conn.execute(
+            "select id,request_json from autopilot_jobs where idempotency_key=?",
+            (idempotency_key,),
+        ).fetchone() if idempotency_key else None
+        if existing:
+            if str(existing[1]) != request_json:
+                raise ValueError("idempotencyKey was already used for a different Autopilot request")
+            job_id = str(existing[0])
+        else:
             conn.execute(
-                "insert into autopilot_steps(job_id,step_index,kind,prompt_type,model_tier,status) values(?,?,?,?,?,?)",
-                (job_id, index, kind, prompt_type, tier, "pending"),
+                "insert into autopilot_jobs(id,idempotency_key,status,stage,progress,request_json,created_at,updated_at) values(?,?,?,?,?,?,?,?)",
+                (job_id, idempotency_key or None, "queued", "research", 0, request_json, created, created),
             )
-    AUTOPILOT_WAKE.set()
+            for index, (kind, prompt_type, tier) in enumerate(_autopilot_spec(request_payload)):
+                conn.execute(
+                    "insert into autopilot_steps(job_id,step_index,kind,prompt_type,model_tier,status) values(?,?,?,?,?,?)",
+                    (job_id, index, kind, prompt_type, tier, "pending"),
+                )
+            created_new = True
+    if created_new:
+        AUTOPILOT_WAKE.set()
     return {"ok": True, "job": _job_payload(job_id)}
 
 
@@ -1162,7 +1233,7 @@ def process_autopilot_job(job_id: str) -> None:
             with db_conn() as conn:
                 conn.execute(
                     "update autopilot_steps set status='completed',model_name=?,output_json=?,input_tokens=?,output_tokens=?,search_queries=?,estimated_cost_usd=?,error=null,completed_at=? where job_id=? and step_index=?",
-                    (str(response.get("model") or "")[:120] or None, canonical_json(output), int(response.get("inputTokens") or 0), int(response.get("outputTokens") or 0), int(response.get("searchQueries") or 0), float(response.get("estimatedCostUsd") or 0), now_iso(), job_id, index),
+                    (str(response.get("model") or "") or None, canonical_json(output), int(response.get("inputTokens") or 0), int(response.get("outputTokens") or 0), int(response.get("searchQueries") or 0), float(response.get("estimatedCostUsd") or 0), now_iso(), job_id, index),
                 )
         except Exception as exc:  # noqa: BLE001
             last_error = str(exc)[:300]
@@ -1179,10 +1250,17 @@ def process_autopilot_job(job_id: str) -> None:
         )
 
 
+def _requires_reconciliation(error: Any) -> bool:
+    message = str(error or "").lower()
+    return "ambiguous" in message or "reconciliation" in message or "reconcile " in message
+
+
 def retry_autopilot_job(job_id: str) -> dict[str, Any]:
     job = _job_payload(job_id)
     if job["status"] not in {"needs_attention", "cancelled"}:
         raise ValueError("Only failed or cancelled jobs can be retried")
+    if _requires_reconciliation(job.get("error")):
+        raise ValueError("Provider reconciliation evidence is required before this job can be retried")
     with db_conn() as conn:
         conn.execute("update autopilot_steps set status='pending',error=null where job_id=? and status='failed'", (job_id,))
         conn.execute("update autopilot_jobs set status='queued',cancel_requested=0,error=null,updated_at=? where id=?", (now_iso(), job_id))
@@ -1200,13 +1278,193 @@ def cancel_autopilot_job(job_id: str) -> dict[str, Any]:
     return get_autopilot_job(job_id)
 
 
+def _reconcile_approved_project(
+    conn: sqlite3.Connection,
+    job_id: str,
+    request_payload: dict[str, Any],
+    package: dict[str, Any],
+    approved_at: str,
+) -> None:
+    row = workspace_row(conn)
+    workspace = verified_workspace_from_row(row)
+    if not row or workspace is None:
+        raise RuntimeError("Workspace must be initialized before Autopilot approval")
+    projects = workspace.setdefault("projects", [])
+    if not isinstance(projects, list):
+        raise RuntimeError("Workspace projects must be an array")
+    if any(isinstance(project, dict) and project.get("autopilotJobId") == job_id for project in projects):
+        return
+
+    channel_package = _dict_object(package.get("channel"))
+    channel_name = str(channel_package.get("name") or "AI Native Channel")[:120]
+    channels = workspace.setdefault("channels", [])
+    if not isinstance(channels, list):
+        raise RuntimeError("Workspace channels must be an array")
+    channel = next(
+        (item for item in channels if isinstance(item, dict) and item.get("name") == channel_name and not item.get("isDemo")),
+        None,
+    )
+    channel_key = str(channel_package.get("key") or "ai-native")
+    ideas = workspace.get("ideas") if isinstance(workspace.get("ideas"), list) else []
+    idea_id = str(ideas[0].get("id")) if ideas and isinstance(ideas[0], dict) and ideas[0].get("id") else channel_key
+    if channel is None:
+        channel_id = f"channel_autopilot_{checksum_text(channel_key)[:16]}"
+        channel = {
+            "id": channel_id,
+            "name": channel_name,
+            "handle": "@" + "".join(char.lower() for char in channel_key if char.isalnum() or char == "-")[:80],
+            "ideaId": idea_id,
+            "niche": str(channel_package.get("niche") or "AI-assisted explainers"),
+            "language": str(request_payload.get("language") or "th"),
+            "role": "experiment" if any(isinstance(item, dict) and not item.get("isDemo") for item in channels) else "primary",
+            "health": 80,
+            "weeklyHours": 8,
+            "weeklyShortsTarget": 3 if request_payload.get("format") == "shorts" else 1,
+            "monthlyLongTarget": 2 if request_payload.get("format") == "long" else 0,
+            "audienceCountries": ["TH"],
+            "createdAt": approved_at,
+            "blueprint": {
+                "concept": str(channel_package.get("niche") or "AI-assisted explainers"),
+                "nameOptions": [channel_name],
+                "promise": str(channel_package.get("promise") or "Clear, useful content made efficiently"),
+                "targetAudience": "ผู้ชมที่ต้องการเนื้อหากระชับและนำไปใช้ได้",
+                "viewerDesire": "เข้าใจเรื่องยากได้เร็ว",
+                "pillars": [str(channel_package.get("niche") or "Explainers"), "อธิบายให้เห็นภาพ", "ขั้นตอนนำไปใช้"],
+                "visualIdentity": "Light Studio, clean infographic",
+                "narrationPersonality": "ชัดเจน เป็นธรรมชาติ น่าเชื่อถือ",
+                "languageStrategy": "Thai-first" if request_payload.get("language") == "th" else "English-first",
+                "voice": "Warm expert",
+                "shortsStrategy": "Strong two-second hook and one payoff",
+                "longFormStrategy": "Evidence-led chapter structure",
+                "plan30Days": [],
+                "experiment90Days": ["ทดสอบหัวข้อ 12 คลิป", "วัด retention และความตั้งใจดูต่อ"],
+                "monetizationPaths": [],
+                "risks": [],
+                "originalityStrategy": "Research-led original scripts and transformed visuals",
+                "factCheckWorkflow": ["Research with sources", "Terra final fact-check", "Human review before upload"],
+                "sourcePolicy": "Use primary or authoritative sources and preserve URLs",
+                "decisionCriteria": ["Human approval required", "Private upload only"],
+            },
+        }
+        channels.append(channel)
+
+    research = _dict_object(package.get("research"))
+    source_rows = workspace.setdefault("sources", [])
+    if not isinstance(source_rows, list):
+        raise RuntimeError("Workspace sources must be an array")
+    source_ids: list[str] = []
+    research_sources = research.get("sources")
+    for index, item in enumerate(research_sources if isinstance(research_sources, list) else []):
+        if not isinstance(item, dict):
+            continue
+        source_id = f"source_{job_id}_{index}"
+        source_ids.append(source_id)
+        source_rows.append({
+            "id": source_id,
+            "projectId": f"project_{job_id}",
+            "title": str(item.get("title") or "Source"),
+            "url": str(item.get("url") or ""),
+            "publisher": str(item.get("publisher") or ""),
+            "accessedAt": approved_at,
+            "claimType": "documented",
+            "notes": str(item.get("notes") or ""),
+        })
+
+    content_plan = _dict_object(package.get("contentPlan"))
+    metadata = _dict_object(package.get("metadata"))
+    script = _dict_object(package.get("script"))
+    handoff = _dict_object(package.get("handoff"))
+    deadline = (datetime.now(timezone.utc) + timedelta(days=7)).date().isoformat()
+    projects.append({
+        "id": f"project_{job_id}",
+        "title": str(metadata.get("title") or content_plan.get("title") or request_payload.get("topic") or "Autopilot video"),
+        "channelId": str(channel["id"]),
+        "ideaId": str(channel.get("ideaId") or idea_id),
+        "series": "Autopilot",
+        "language": str(request_payload.get("language") or "th"),
+        "platforms": ["youtube"],
+        "format": str(request_payload.get("format") or "shorts"),
+        "targetDurationSeconds": int(request_payload.get("durationSeconds") or 30),
+        "deadline": deadline,
+        "publishAt": f"{deadline}T19:00:00",
+        "owner": str(workspace.get("name") or "Creator"),
+        "estimatedMinutes": 90,
+        "budgetThb": 0,
+        "creditEstimateLow": 0,
+        "creditEstimateHigh": 0,
+        "actualCredits": 0,
+        "status": "assets-needed",
+        "growthLoopStatus": "pending",
+        "sourceIds": source_ids,
+        "researchSummary": str(research.get("summary") or ""),
+        "factCheckSummary": str(script.get("factCheckSummary") or ""),
+        "scriptVersion": 1,
+        "script": str(script.get("narration") or ""),
+        "hook": str(content_plan.get("hook") or ""),
+        "storyboard": handoff.get("storyboard") if isinstance(handoff.get("storyboard"), list) else [],
+        "assetPrompts": handoff.get("assetPrompts") if isinstance(handoff.get("assetPrompts"), list) else [],
+        "capcutBrief": str(handoff.get("capcutBrief") or ""),
+        "promptVersions": [],
+        "thumbnailVersions": [str(metadata.get("title") or ""), str(metadata.get("thumbnailText") or "")],
+        "publicationLinks": [],
+        "lessonsLearned": "",
+        "analyticsPostmortem": "",
+        "repurposingPlan": str(handoff.get("repurposingPlan") or ""),
+        "workflowEvents": [{"id": f"event_{job_id}_approved", "at": approved_at, "type": "prompt-applied", "note": "Autopilot package approved after one human review"}],
+        "policyChecks": {},
+        "riskLevel": "review" if research.get("risks") else "low",
+        "createdAt": approved_at,
+        "updatedAt": approved_at,
+        "autopilotJobId": job_id,
+        "autopilotPackage": package,
+    })
+
+    current_revision = int(row[2])
+    revision = current_revision + 1
+    workspace["revision"] = revision
+    workspace["updatedAt"] = approved_at
+    data = canonical_json(workspace)
+    digest = checksum_text(data)
+    conn.execute(
+        "insert or ignore into workspace_history(workspace_id,revision,checksum,data,created_at) values(?,?,?,?,?)",
+        ("default", current_revision, str(row[3] or checksum_text(str(row[0]))), row[0], row[4]),
+    )
+    conn.execute(
+        "update workspace set data=?,schema_version=?,revision=?,checksum=?,updated_at=? where id='default'",
+        (data, int(workspace.get("schemaVersion", 0)), revision, digest, approved_at),
+    )
+    conn.execute(
+        "delete from workspace_history where id in (select id from workspace_history where workspace_id='default' order by revision desc limit -1 offset ?)",
+        (MAX_HISTORY,),
+    )
+
+
 def approve_autopilot_job(job_id: str) -> dict[str, Any]:
-    job = _job_payload(job_id)
-    if job["status"] not in {"review_ready", "approved"}:
-        raise ValueError("Job is not ready for approval")
-    with db_conn() as conn:
-        conn.execute("update autopilot_jobs set status='approved',approved_at=coalesce(approved_at,?),updated_at=? where id=?", (now_iso(), now_iso(), job_id))
-    return get_autopilot_job(job_id)
+    approved_at = now_iso()
+    with db_conn(timeout=10) as conn:
+        conn.execute("pragma synchronous=full")
+        conn.execute("begin immediate")
+        row = conn.execute(
+            "select status,request_json,package_json,approved_at from autopilot_jobs where id=?",
+            (job_id,),
+        ).fetchone()
+        if not row:
+            raise KeyError("Autopilot job not found")
+        if row[0] not in {"review_ready", "approved"}:
+            raise ValueError("Job is not ready for approval")
+        request_payload = _json_object(str(row[1]))
+        package = _json_object(str(row[2]))
+        if not package:
+            raise ValueError("Autopilot package is not ready")
+        approval_time = str(row[3] or approved_at)
+        _reconcile_approved_project(conn, job_id, request_payload, package, approval_time)
+        conn.execute(
+            "update autopilot_jobs set status='approved',approved_at=coalesce(approved_at,?),updated_at=? where id=?",
+            (approved_at, approved_at, job_id),
+        )
+    response = get_autopilot_job(job_id)
+    response["workspace"] = load_workspace()["workspace"]
+    return response
 
 
 def autopilot_package_zip(job_id: str) -> bytes:
@@ -1230,15 +1488,29 @@ def autopilot_package_zip(job_id: str) -> bytes:
     return buffer.getvalue()
 
 
+def claim_next_autopilot_job() -> str | None:
+    claimed_at = now_iso()
+    with db_conn(timeout=10) as conn:
+        conn.execute("begin immediate")
+        row = conn.execute("select id from autopilot_jobs where status='queued' order by created_at limit 1").fetchone()
+        if not row:
+            return None
+        job_id = str(row[0])
+        updated = conn.execute(
+            "update autopilot_jobs set status='running',updated_at=? where id=? and status='queued'",
+            (claimed_at, job_id),
+        )
+        return job_id if updated.rowcount == 1 else None
+
+
 def autopilot_worker_loop() -> None:
     while not WORKER_STOP.is_set():
-        with db_conn() as conn:
-            row = conn.execute("select id from autopilot_jobs where status='queued' order by created_at limit 1").fetchone()
-        if row:
+        job_id = claim_next_autopilot_job()
+        if job_id:
             try:
-                process_autopilot_job(str(row[0]))
+                process_autopilot_job(job_id)
             except Exception as exc:  # noqa: BLE001
-                _set_job_attention(str(row[0]), "research", str(exc))
+                _set_job_attention(job_id, "research", str(exc))
             continue
         AUTOPILOT_WAKE.wait(3.0)
         AUTOPILOT_WAKE.clear()
@@ -1442,19 +1714,15 @@ def receive_video_asset(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
 
 
 def create_youtube_upload(payload: dict[str, Any]) -> dict[str, Any]:
+    idempotency_key = str(payload.get("idempotencyKey") or "").strip()
+    if not idempotency_key:
+        raise ValueError("idempotencyKey is required for YouTube upload creation")
+    if len(idempotency_key) > 128 or not all(char.isalnum() or char in "-_.:" for char in idempotency_key):
+        raise ValueError("idempotencyKey must contain at most 128 safe characters")
     asset_id = str(payload.get("assetId") or "").strip()
     job_id = str(payload.get("jobId") or "").strip()
     if not job_id:
         raise ValueError("An approved Autopilot job is required")
-    with db_conn() as conn:
-        asset = conn.execute("select status from video_assets where id=?", (asset_id,)).fetchone()
-        job = conn.execute("select status from autopilot_jobs where id=?", (job_id,)).fetchone()
-    if not asset or asset[0] != "ready":
-        raise ValueError("A ready video asset is required")
-    if not job or job[0] != "approved":
-        raise ValueError("An approved Autopilot job is required")
-    if not youtube_status()["connected"]:
-        raise RuntimeError("Connect YouTube before uploading")
     raw = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     metadata = {
         "title": str(raw.get("title") or "Creator Empire video")[:100],
@@ -1464,14 +1732,38 @@ def create_youtube_upload(payload: dict[str, Any]) -> dict[str, Any]:
         "containsSyntheticMedia": bool(raw.get("containsSyntheticMedia", True)),
         "privacyStatus": "private",
     }
+    metadata_json = canonical_json(metadata)
     upload_id = f"yt_{uuid.uuid4().hex}"
     created = now_iso()
+    created_new = False
     with db_conn() as conn:
-        conn.execute(
-            "insert into youtube_uploads(id,asset_id,job_id,status,progress,metadata_json,created_at,updated_at) values(?,?,?,'queued',0,?,?,?)",
-            (upload_id, asset_id, job_id, canonical_json(metadata), created, created),
-        )
-    YOUTUBE_WAKE.set()
+        conn.execute("begin immediate")
+        existing = conn.execute(
+            "select id,asset_id,job_id,metadata_json from youtube_uploads where idempotency_key=?",
+            (idempotency_key,),
+        ).fetchone() if idempotency_key else None
+        if existing:
+            if (str(existing[1]), str(existing[2] or ""), str(existing[3])) != (asset_id, job_id, metadata_json):
+                raise ValueError("idempotencyKey was already used for a different YouTube upload request")
+            upload_id = str(existing[0])
+        else:
+            asset = conn.execute("select status,project_id from video_assets where id=?", (asset_id,)).fetchone()
+            job = conn.execute("select status from autopilot_jobs where id=?", (job_id,)).fetchone()
+            if not asset or asset[0] != "ready":
+                raise ValueError("A ready video asset is required")
+            if str(asset[1] or "") != job_id:
+                raise ValueError("The video asset must belong to the same Autopilot job")
+            if not job or job[0] != "approved":
+                raise ValueError("An approved Autopilot job is required")
+            if not youtube_status()["connected"]:
+                raise RuntimeError("Connect YouTube before uploading")
+            conn.execute(
+                "insert into youtube_uploads(id,idempotency_key,asset_id,job_id,status,progress,metadata_json,created_at,updated_at) values(?,?,?,?, 'queued',0,?,?,?)",
+                (upload_id, idempotency_key or None, asset_id, job_id, metadata_json, created, created),
+            )
+            created_new = True
+    if created_new:
+        YOUTUBE_WAKE.set()
     return get_youtube_upload(upload_id)
 
 
@@ -1489,32 +1781,36 @@ def _initiate_youtube_session(access_token: str, metadata: dict[str, Any], size:
         "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False, "containsSyntheticMedia": metadata["containsSyntheticMedia"]},
     }, ensure_ascii=False).encode("utf-8")
     location = ""
-    for attempt in range(3):
-        request = urllib.request.Request(
-            "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
-            data=body, method="POST", headers={
-                "Authorization": f"Bearer {access_token}", "Content-Type": "application/json; charset=UTF-8",
-                "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": "video/mp4",
-            },
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                location = response.headers.get("Location", "")
-            break
-        except urllib.error.HTTPError as exc:
-            exc.read()
-            if exc.code in {429, 500, 502, 503, 504} and attempt < 2:
-                time.sleep(2**attempt)
-                continue
-            raise RuntimeError(f"YouTube upload session rejected with HTTP {exc.code}") from exc
-        except urllib.error.URLError as exc:
-            if attempt < 2:
-                time.sleep(2**attempt)
-                continue
-            raise RuntimeError("YouTube upload session could not be reached") from exc
+    request = urllib.request.Request(
+        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        data=body, method="POST", headers={
+            "Authorization": f"Bearer {access_token}", "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Length": str(size), "X-Upload-Content-Type": "video/mp4",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            location = response.headers.get("Location", "")
+    except urllib.error.HTTPError as exc:
+        exc.read()
+        if _provider_http_requires_reconciliation(exc.code):
+            raise RuntimeError(f"YouTube upload session HTTP {exc.code}; reconciliation is required before retry") from exc
+        raise RuntimeError(f"YouTube upload session HTTP {exc.code}; request rejected") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError("YouTube upload session outcome is ambiguous; reconciliation is required before retry") from exc
     if not location.startswith("https://www.googleapis.com/"):
-        raise RuntimeError("YouTube resumable upload session URI is missing")
+        raise RuntimeError("YouTube resumable upload session URI is missing after dispatch; reconciliation is required before retry")
     return location
+
+
+def _youtube_acknowledged_offset(range_header: str, chunk_start: int, chunk_end: int) -> int:
+    match = re.fullmatch(r"bytes=0-(\d+)", range_header.strip())
+    if not match:
+        raise RuntimeError("YouTube 308 response omitted a valid acknowledged Range; reconciliation is required before retransmission")
+    acknowledged_end = int(match.group(1))
+    if acknowledged_end < chunk_start or acknowledged_end > chunk_end:
+        raise RuntimeError("YouTube 308 acknowledged an unexpected byte range; reconciliation is required before retransmission")
+    return acknowledged_end + 1
 
 
 def process_youtube_upload(upload_id: str) -> None:
@@ -1532,6 +1828,7 @@ def process_youtube_upload(upload_id: str) -> None:
     with db_conn() as conn:
         conn.execute("update youtube_uploads set status='uploading',error=null,updated_at=? where id=?", (now_iso(), upload_id))
         conn.execute("update video_assets set status='uploading' where id=?", (asset_id,))
+    provider_dispatched = False
     try:
         access_token = _youtube_access_token()
         metadata = _json_object(str(metadata_json))
@@ -1542,8 +1839,8 @@ def process_youtube_upload(upload_id: str) -> None:
         offset = int(uploaded_bytes or 0)
         chunk_size = 8 * 1024 * 1024
         with path.open("rb") as stream:
-            stream.seek(offset)
             while offset < int(size_bytes):
+                stream.seek(offset)
                 chunk = stream.read(min(chunk_size, int(size_bytes) - offset))
                 if not chunk:
                     raise RuntimeError("Video asset ended unexpectedly")
@@ -1553,8 +1850,9 @@ def process_youtube_upload(upload_id: str) -> None:
                     "Content-Length": str(len(chunk)), "Content-Range": f"bytes {offset}-{end}/{size_bytes}",
                 })
                 response_payload: dict[str, Any] = {}
-                for attempt in range(3):
+                for attempt in range(2):
                     try:
+                        provider_dispatched = True
                         with urllib.request.urlopen(request, timeout=300) as response:
                             response_payload = _json_object(response.read().decode("utf-8"))
                         offset = end + 1
@@ -1562,18 +1860,19 @@ def process_youtube_upload(upload_id: str) -> None:
                     except urllib.error.HTTPError as exc:
                         if exc.code == 308:
                             range_header = exc.headers.get("Range", "") if exc.headers else ""
-                            offset = int(range_header.rsplit("-", 1)[-1]) + 1 if "-" in range_header else end + 1
                             exc.read()
+                            offset = _youtube_acknowledged_offset(range_header, offset, end)
                             break
                         exc.read()
                         if exc.code == 401 and attempt == 0:
                             access_token = _youtube_access_token(True)
                             request.add_header("Authorization", f"Bearer {access_token}")
                             continue
-                        if exc.code in {500, 502, 503, 504} and attempt < 2:
-                            time.sleep(2**attempt)
-                            continue
-                        raise RuntimeError(f"YouTube upload failed with HTTP {exc.code}") from exc
+                        if _provider_http_requires_reconciliation(exc.code):
+                            raise RuntimeError(f"YouTube upload HTTP {exc.code}; reconciliation is required before retransmission") from exc
+                        raise RuntimeError(f"YouTube upload HTTP {exc.code}; request rejected") from exc
+                    except Exception as exc:
+                        raise RuntimeError(f"YouTube chunk outcome is ambiguous after {type(exc).__name__}; reconciliation is required before retransmission") from exc
                 progress = min(99, int(offset * 100 / int(size_bytes)))
                 with db_conn() as conn:
                     conn.execute("update youtube_uploads set uploaded_bytes=?,progress=?,updated_at=? where id=?", (offset, progress, now_iso(), upload_id))
@@ -1585,10 +1884,13 @@ def process_youtube_upload(upload_id: str) -> None:
                         conn.execute("update video_assets set status='uploaded' where id=?", (asset_id,))
                     path.unlink(missing_ok=True)
                     return
-        raise RuntimeError("YouTube did not return a video ID after upload")
+        raise RuntimeError("YouTube did not return a video ID after dispatch; reconciliation is required before retry")
     except Exception as exc:  # noqa: BLE001
+        error = str(exc)
+        if provider_dispatched and not _requires_reconciliation(error) and "request rejected" not in error.lower():
+            error = f"{error}; provider upload was dispatched and reconciliation is required before retry"
         with db_conn() as conn:
-            conn.execute("update youtube_uploads set status='needs_attention',error=?,updated_at=? where id=?", (str(exc)[:300], now_iso(), upload_id))
+            conn.execute("update youtube_uploads set status='needs_attention',error=?,updated_at=? where id=?", (error[:300], now_iso(), upload_id))
             conn.execute("update video_assets set status='ready' where id=?", (asset_id,))
 
 
@@ -1596,28 +1898,60 @@ def retry_youtube_upload(upload_id: str) -> dict[str, Any]:
     current = get_youtube_upload(upload_id)["upload"]
     if current["status"] != "needs_attention":
         raise ValueError("Only failed YouTube uploads can be retried")
+    if _requires_reconciliation(current.get("error")):
+        raise ValueError("Provider reconciliation evidence is required before this upload can be retried")
     with db_conn() as conn:
         conn.execute("update youtube_uploads set status='queued',error=null,updated_at=? where id=?", (now_iso(), upload_id))
     YOUTUBE_WAKE.set()
     return get_youtube_upload(upload_id)
 
 
+def claim_next_youtube_upload() -> str | None:
+    claimed_at = now_iso()
+    with db_conn(timeout=10) as conn:
+        conn.execute("begin immediate")
+        row = conn.execute("select id from youtube_uploads where status='queued' order by created_at limit 1").fetchone()
+        if not row:
+            return None
+        upload_id = str(row[0])
+        updated = conn.execute(
+            "update youtube_uploads set status='uploading',updated_at=? where id=? and status='queued'",
+            (claimed_at, upload_id),
+        )
+        return upload_id if updated.rowcount == 1 else None
+
+
 def youtube_worker_loop() -> None:
     while not WORKER_STOP.is_set():
-        with db_conn() as conn:
-            row = conn.execute("select id from youtube_uploads where status='queued' order by created_at limit 1").fetchone()
-        if row:
-            process_youtube_upload(str(row[0]))
+        upload_id = claim_next_youtube_upload()
+        if upload_id:
+            process_youtube_upload(upload_id)
             continue
         YOUTUBE_WAKE.wait(3.0)
         YOUTUBE_WAKE.clear()
 
 
 def recover_interrupted_jobs() -> None:
-    """Requeue only resumable background work after an unclean service stop."""
+    """Fail closed when a provider outcome may have committed before the local crash."""
+    recovered_at = now_iso()
+    autopilot_error = "Ambiguous provider outcome after service interruption; reconcile usage before manual retry."
+    youtube_error = "Ambiguous YouTube upload outcome after service interruption; reconcile provider state before manual retry."
     with db_conn() as conn:
-        conn.execute("update autopilot_jobs set status='queued',updated_at=? where status='running'", (now_iso(),))
-        conn.execute("update youtube_uploads set status='queued',updated_at=? where status='uploading'", (now_iso(),))
+        conn.execute(
+            "update autopilot_steps set status='failed',error=? where status='running'",
+            (autopilot_error,),
+        )
+        conn.execute(
+            "update autopilot_jobs set status='needs_attention',error=?,updated_at=? where status='running'",
+            (autopilot_error, recovered_at),
+        )
+        conn.execute(
+            "update video_assets set status='ready' where id in (select asset_id from youtube_uploads where status='uploading')",
+        )
+        conn.execute(
+            "update youtube_uploads set status='needs_attention',error=?,updated_at=? where status='uploading'",
+            (youtube_error, recovered_at),
+        )
 
 
 def ai_runs() -> dict[str, Any]:
@@ -1748,6 +2082,8 @@ class CreatorHandler(BaseHTTPRequestHandler):
             if urllib.parse.urlparse(self.path).path == "/api/workspace":
                 json_response(self, 200, save_workspace(read_json(self))); return
             json_response(self, 404, {"ok": False, "error": "Not found"})
+        except WorkspaceConflict as exc:
+            json_response(self, 409, {"ok": False, "error": str(exc)[:300]})
         except Exception as exc:  # noqa: BLE001
             json_response(self, 400, {"ok": False, "error": str(exc)[:300]})
 

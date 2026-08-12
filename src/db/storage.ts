@@ -29,6 +29,12 @@ interface WorkspacePayload {
 let status: StorageStatus = { mode: 'loading', ok: false, detail: 'Starting storage…' };
 const API_TIMEOUT_MS = 3500;
 
+class ServerResponseError extends Error {
+  constructor(readonly statusCode: number, statusText: string) {
+    super(`${statusCode} ${statusText}`);
+  }
+}
+
 export const getStorageStatus = (): StorageStatus => status;
 
 const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
@@ -43,8 +49,12 @@ const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
         ...(init?.headers ?? {}),
       },
     });
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    return await response.json() as T;
+    if (!response.ok) throw new ServerResponseError(response.status, response.statusText);
+    try {
+      return await response.json() as T;
+    } catch {
+      throw new ServerResponseError(response.status, 'Invalid JSON response');
+    }
   } finally {
     window.clearTimeout(timeout);
   }
@@ -64,10 +74,10 @@ const freshness = (workspace: Workspace | null): [number, number] => {
 };
 
 const newer = (a: Workspace | null, b: Workspace | null): Workspace | null => {
-  const [ar, at] = freshness(a);
-  const [br, bt] = freshness(b);
+  const [ar] = freshness(a);
+  const [br] = freshness(b);
   if (ar !== br) return ar > br ? a : b;
-  return at >= bt ? a : b;
+  return a;
 };
 
 const isFresherThan = (candidate: Workspace | null, baseline: Workspace | null): boolean => {
@@ -76,12 +86,14 @@ const isFresherThan = (candidate: Workspace | null, baseline: Workspace | null):
   return candidateRevision > baselineRevision || (candidateRevision === baselineRevision && candidateUpdatedAt > baselineUpdatedAt);
 };
 
-const putSqlite = async (workspace: Workspace): Promise<{ workspace: Workspace; storage?: ServerStorageMeta }> => {
+const putSqlite = async (workspace: Workspace, expectedRevision: number): Promise<{ workspace: Workspace; storage?: ServerStorageMeta }> => {
   const payload = await fetchJson<{ ok: true; workspace?: unknown; storage?: ServerStorageMeta }>('/api/workspace', {
     method: 'PUT',
-    body: JSON.stringify({ workspace }),
+    body: JSON.stringify({ workspace, expectedRevision }),
   });
-  return { workspace: validWorkspace(payload.workspace) ?? workspace, storage: payload.storage };
+  const saved = validWorkspace(payload.workspace);
+  if (!saved) throw new ServerResponseError(200, 'Invalid workspace response');
+  return { workspace: saved, storage: payload.storage };
 };
 
 export const loadWorkspaceRecord = async (): Promise<Workspace | null> => {
@@ -114,11 +126,10 @@ export const loadWorkspaceRecord = async (): Promise<Workspace | null> => {
     return null;
   }
 
-  // Reconcile in both directions. Revision is authoritative; updatedAt breaks equal-revision ties.
-  // This also protects edits made from an older client that failed to increment revision but have a newer timestamp.
+  // Reconcile only a strictly newer IndexedDB revision. SQLite is authoritative on revision ties.
   if (winner === indexed && indexed && isFresherThan(indexed, sqlite)) {
     try {
-      const saved = await putSqlite(indexed);
+      const saved = await putSqlite(indexed, sqlite?.revision ?? 0);
       await saveIndexedDb(saved.workspace);
       status = {
         mode: 'hybrid', ok: true,
@@ -128,6 +139,7 @@ export const loadWorkspaceRecord = async (): Promise<Workspace | null> => {
       return saved.workspace;
     } catch (error) {
       console.warn('Could not reconcile IndexedDB into SQLite.', error);
+      if (error instanceof ServerResponseError) throw error;
       status = { mode: 'indexeddb', ok: true, detail: 'Using newer IndexedDB revision; SQLite reconciliation is pending.', revision: indexed.revision };
       return indexed;
     }
@@ -146,7 +158,7 @@ export const saveWorkspaceRecord = async (workspace: Workspace): Promise<Workspa
   // IndexedDB is always a local crash/offline mirror, never an either/or storage mode.
   await saveIndexedDb(workspace);
   try {
-    const saved = await putSqlite(workspace);
+    const saved = await putSqlite(workspace, Math.max(0, (workspace.revision ?? 0) - 1));
     await saveIndexedDb(saved.workspace);
     status = {
       mode: 'hybrid', ok: true, detail: `Saved transactionally · revision ${saved.workspace.revision ?? 0}`,
@@ -154,13 +166,21 @@ export const saveWorkspaceRecord = async (workspace: Workspace): Promise<Workspa
     };
     return saved.workspace;
   } catch (error) {
-    console.warn('SQLite save failed; IndexedDB mirror retained for later reconciliation.', error);
+    if (error instanceof ServerResponseError) {
+      status = {
+        mode: 'hybrid', ok: false,
+        detail: `SQLite rejected workspace revision ${workspace.revision ?? 0}; reload before saving again.`,
+        revision: workspace.revision,
+      };
+      throw error;
+    }
+    console.warn('SQLite save is unresolved; IndexedDB mirror retained for reconciliation.', error);
     status = {
       mode: 'indexeddb', ok: true,
       detail: `SQLite unavailable; revision ${workspace.revision ?? 0} is safe in IndexedDB and will reconcile on reconnect.`,
       revision: workspace.revision,
     };
-    return workspace;
+    throw error;
   }
 };
 
