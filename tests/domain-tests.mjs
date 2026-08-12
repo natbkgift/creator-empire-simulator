@@ -11,7 +11,7 @@ import { applyChannelFocus, applyPortfolioFocus, applyProjectFocus, focusedChann
 import {
   buildWorkflowTasks, promptCompletionStatus, rebuildWorkflowTasks, rescheduleProjectWorkflow,
   requiredPolicyChecks, isProductionComplete, syncNextWorkflowMission, taskIsUnlocked,
-  policyRiskLevel, workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
+  mediaArtifactReadiness, policyRiskLevel, workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
 } from '../dist/src/domain/workflow.js';
 import { migrateWorkspace } from '../dist/src/domain/migration.js';
 import { aiWorkflowCoverage, promptResponseContracts } from '../dist/src/domain/ai-contracts.js';
@@ -467,6 +467,48 @@ test('CapCut Draft cannot advance to Editing until cost ledger exists', () => {
   workspace.credits = workspace.credits.filter((entry) => entry.projectId !== project.id); assert.equal(workflowReadiness(workspace, project, 'editing').ready, false);
   workspace.credits.push({ id:'credit_test', projectId:project.id, channelId:project.channelId, createdAt:new Date().toISOString(), balanceBefore:100,balanceAfter:90,tool:'video-clip',mode:'standard',model:'Test',durationSeconds:5,resolution:'720p',soundEnabled:false,generations:1,regenerations:0,usableOutputs:1,completedVideo:false,visualStyle:'Documentary',notes:'' });
   assert.equal(workflowReadiness(workspace, project, 'editing').ready, true);
+});
+
+test('media artifact readiness requires project-scoped reviewed voice captions render and QA evidence', () => {
+  const project = structuredClone(migratedSeed().projects[0]);
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  assert.match(mediaArtifactReadiness(project).blockers.join(' '), /voice/i);
+
+  const artifact = (kind, language = project.language) => ({
+    id: `${kind}-1`, projectId: project.id, kind, sha256: 'a'.repeat(64), status: 'reviewed', language,
+    createdAt: '2026-08-12T00:00:00Z',
+  });
+  project.mediaArtifacts = [artifact('voice'), artifact('captions'), artifact('render')];
+  project.mediaQa = {
+    reviewedAt: '2026-08-12T00:10:00Z', reviewer: 'owner', result: 'pass',
+    artifactDigests: { voice: 'a'.repeat(64), captions: 'a'.repeat(64), render: 'a'.repeat(64) },
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  };
+  assert.equal(mediaArtifactReadiness(project).ready, true);
+
+  project.mediaArtifacts[2].projectId = 'other-project';
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaArtifacts[2] = artifact('render');
+  project.mediaArtifacts[1].sha256 = 'not-a-digest';
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaArtifacts[1] = artifact('captions', project.language === 'en' ? 'th' : 'en');
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaArtifacts[1] = artifact('captions');
+  project.mediaQa.checks.captionSync = false;
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.checks.captionSync = true;
+  project.mediaQa.checks = null;
+  assert.doesNotThrow(() => mediaArtifactReadiness(project));
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.checks = { a: true, b: true, c: true, d: true, e: true, f: true };
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.reviewedAt = 7;
+  assert.doesNotThrow(() => mediaArtifactReadiness(project));
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.reviewedAt = '2026-08-12T00:10:00Z';
+  project.mediaQa.checks = { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true };
+  project.mediaQa.artifactDigests.render = 'b'.repeat(64);
+  assert.equal(mediaArtifactReadiness(project).ready, false);
 });
 
 let passed=0;

@@ -100,6 +100,18 @@ export interface VideoAsset {
   status: 'ready' | 'uploading' | 'uploaded' | 'expired'; createdAt: string; expiresAt: string;
 }
 
+export interface MediaArtifact {
+  id: string; projectId: string; kind: 'voice' | 'captions' | 'render'; sha256: string;
+  status: 'ready' | 'reviewed' | 'rejected'; language: Language; createdAt: string;
+  filename?: string; durationSeconds?: number; resolution?: string; source?: 'manual' | 'adapter';
+}
+
+export interface MediaQaEvidence {
+  reviewedAt: string; reviewer: string; result: 'pass' | 'fail';
+  artifactDigests: { voice: string; captions: string; render: string };
+  checks: { brand: boolean; duration: boolean; resolution: boolean; audio: boolean; captionSync: boolean; language: boolean };
+}
+
 export interface VideoProject {
   id: string; title: string; channelId: string; ideaId: string; series: string; language: Language; platforms: string[];
   format: Exclude<VideoFormat, 'both'>; targetDurationSeconds: number; deadline: string;
@@ -112,6 +124,7 @@ export interface VideoProject {
   publicationLinks: string[]; lessonsLearned: string; analyticsPostmortem: string; repurposingPlan: string;
   workflowEvents: WorkflowEvent[]; policyChecks: Record<string, boolean>; policyEvidence?: Record<string, string>; riskLevel: RiskLevel; createdAt: string; updatedAt: string; isDemo?: boolean;
   autopilotJobId?: string; autopilotPackage?: AutopilotPackage;
+  mediaArtifacts?: MediaArtifact[]; mediaQa?: MediaQaEvidence;
 }
 
 export type PromptType =
