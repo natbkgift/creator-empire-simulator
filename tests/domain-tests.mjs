@@ -16,6 +16,7 @@ import {
 import { migrateWorkspace } from '../dist/src/domain/migration.js';
 import { aiWorkflowCoverage, promptResponseContracts } from '../dist/src/domain/ai-contracts.js';
 import { clearPendingRequest, clearRequestKey, getOrCreateRequestKey, loadPendingRequest, peekRequestKey, requestFingerprint, savePendingRequest } from '../dist/src/domain/request-idempotency.js';
+import { isValidReviewTimestamp, saveManualMediaEvidence } from '../dist/src/domain/media-evidence.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -38,6 +39,86 @@ const addReviewedMedia = (project) => {
     checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
   };
 };
+
+test('manual media evidence atomically replaces exact project artifacts and QA digests', () => {
+  const workspace = migratedSeed();
+  const project = workspace.projects[0];
+  const digests = { voice: '1'.repeat(64), captions: '2'.repeat(64), render: '3'.repeat(64) };
+  const result = saveManualMediaEvidence(project, {
+    filenames: { voice: 'voice-th.wav', captions: 'captions-th.srt', render: 'render-th.mp4' },
+    digests,
+    reviewer: 'Nat', reviewedAt: '2026-08-12T02:00:00.000Z',
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(project.mediaArtifacts.map(({ kind, sha256, status, language, source }) => ({ kind, sha256, status, language, source })), [
+    { kind: 'voice', sha256: digests.voice, status: 'reviewed', language: project.language, source: 'manual' },
+    { kind: 'captions', sha256: digests.captions, status: 'reviewed', language: project.language, source: 'manual' },
+    { kind: 'render', sha256: digests.render, status: 'reviewed', language: project.language, source: 'manual' },
+  ]);
+  assert.deepEqual(project.mediaQa.artifactDigests, digests);
+  assert.equal(project.mediaQa.result, 'pass');
+});
+
+test('manual media evidence rejects malformed digests without mutating the project', () => {
+  const project = migratedSeed().projects[0];
+  const before = structuredClone(project);
+  const result = saveManualMediaEvidence(project, {
+    filenames: { voice: 'voice.wav', captions: 'captions.srt', render: 'render.mp4' },
+    digests: { voice: 'not-a-digest', captions: '2'.repeat(64), render: '3'.repeat(64) },
+    reviewer: 'Nat', reviewedAt: '2026-08-12T02:00:00.000Z',
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(project, before);
+});
+
+test('manual media evidence rejects malformed runtime fields, partial checks, and invalid review time', () => {
+  const valid = {
+    filenames: { voice: 'voice.wav', captions: 'captions.srt', render: 'render.mp4' },
+    digests: { voice: '1'.repeat(64), captions: '2'.repeat(64), render: '3'.repeat(64) },
+    reviewer: 'Nat', reviewedAt: '2026-08-12T02:00:00.000Z',
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  };
+  for (const input of [
+    { ...valid, filenames: { ...valid.filenames, voice: undefined } },
+    { ...valid, digests: { ...valid.digests, render: null } },
+    { ...valid, checks: { brand: true } },
+    { ...valid, reviewedAt: 'not-a-date' },
+    { ...valid, reviewedAt: '2026-02-30T00:00' },
+    { ...valid, reviewedAt: '0' },
+  ]) {
+    const project = migratedSeed().projects[0];
+    const before = structuredClone(project);
+    assert.doesNotThrow(() => saveManualMediaEvidence(project, input));
+    assert.equal(saveManualMediaEvidence(project, input).ok, false);
+    assert.deepEqual(project, before);
+  }
+});
+
+test('review timestamps require strict real ISO calendar datetimes', () => {
+  assert.equal(isValidReviewTimestamp('2026-08-12T02:00'), true);
+  assert.equal(isValidReviewTimestamp('2026-08-12T02:00:00.000Z'), true);
+  assert.equal(isValidReviewTimestamp('2026-08-12T02:00:00+07:00'), true);
+  assert.equal(isValidReviewTimestamp('2026-02-30T00:00'), false);
+  assert.equal(isValidReviewTimestamp('0'), false);
+});
+
+test('media readiness rejects malformed persisted QA review timestamps', () => {
+  const project = migratedSeed().projects[0];
+  addReviewedMedia(project);
+  project.mediaQa.reviewedAt = 'not-a-date';
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.reviewedAt = '2026-02-30T00:00';
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+});
+
+test('media evidence form preflights validation before opening a persistent workspace update', () => {
+  const source = readFileSync(new URL('../src/features/pipeline.ts', import.meta.url), 'utf8');
+  const handler = source.slice(source.indexOf("dialog.querySelector<HTMLFormElement>('#project-media-evidence')"), source.indexOf('\n};\n\nconst projectDate'));
+  assert.ok(handler.indexOf('saveManualMediaEvidence(structuredClone(project)') > 0);
+  assert.ok(handler.indexOf('saveManualMediaEvidence(structuredClone(project)') < handler.indexOf('updateWorkspace'));
+});
 
 test('request keys survive ambiguous retries and clear only after reconciliation', () => {
   const values = new Map();

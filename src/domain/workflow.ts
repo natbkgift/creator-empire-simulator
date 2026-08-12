@@ -8,6 +8,7 @@ import type {
   WorkflowEvent,
   Workspace,
 } from './types.js';
+import { isValidReviewTimestamp } from './media-evidence.js';
 import { addDays, todayIso, uid } from './utils.js';
 
 export const workflowStatuses: ProjectStatus[] = [
@@ -106,7 +107,7 @@ export const mediaArtifactReadiness = (project: VideoProject): WorkflowReadiness
       && qa.artifactDigests[kind].toLowerCase() === reviewedDigests.get(kind),
     );
   if (qa && qa.result === 'pass'
-    && typeof qa.reviewedAt === 'string' && Boolean(qa.reviewedAt.trim())
+    && isValidReviewTimestamp(qa.reviewedAt)
     && typeof qa.reviewer === 'string' && Boolean(qa.reviewer.trim())
     && qaChecksPass && qaBindsArtifacts) {
     completed.push('Media QA records brand, duration, resolution, audio, caption sync, and language review.');

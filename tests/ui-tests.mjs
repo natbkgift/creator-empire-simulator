@@ -30,6 +30,7 @@ import { routeTitle } from '../dist/src/app/navigation.js';
 import { renderSimpleShell } from '../dist/src/app/simple-shell.js';
 import { renderSimpleCreate, renderSimpleChannels, renderSimpleProjects } from '../dist/src/features/simple.js';
 import { simpleChannelRecommendations, thailandThenNowProfile } from '../dist/src/domain/simple-channels.js';
+import { mediaEvidenceForm } from '../dist/src/features/pipeline.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -95,6 +96,24 @@ test('Policy Shield exposes policy registry source and status without trusting m
   assert.ok(html.includes('rel="noopener noreferrer"'));
   assert.ok(html.includes('Policy &lt;topic&gt;'));
   assert.ok(html.includes('uncertain'));
+});
+
+test('project media evidence form exposes bounded exact-digest inputs and escapes saved metadata', () => {
+  const project = createSeedWorkspace().projects[0];
+  project.mediaArtifacts = [{
+    id: 'voice-1', projectId: project.id, kind: 'voice', filename: 'voice <final>.wav',
+    sha256: 'a'.repeat(64), status: 'reviewed', language: project.language,
+    source: 'manual', createdAt: '2026-08-12T02:00:00.000Z',
+  }];
+  const html = mediaEvidenceForm(project);
+  assert.ok(html.includes('id="project-media-evidence"'));
+  assert.ok(html.includes('name="voiceSha256"'));
+  assert.ok(html.includes('name="captionsSha256"'));
+  assert.ok(html.includes('name="renderSha256"'));
+  assert.ok(html.includes('name="qaBrand"'));
+  assert.ok(html.includes('name="qaLanguage"'));
+  assert.ok(html.includes('voice &lt;final&gt;.wav'));
+  assert.ok(!html.includes('voice <final>.wav'));
 });
 
 test('metricCard and metric render structured values with escaping', () => {
