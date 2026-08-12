@@ -11,7 +11,7 @@ import { applyChannelFocus, applyPortfolioFocus, applyProjectFocus, focusedChann
 import {
   buildWorkflowTasks, promptCompletionStatus, rebuildWorkflowTasks, rescheduleProjectWorkflow,
   requiredPolicyChecks, isProductionComplete, syncNextWorkflowMission, taskIsUnlocked,
-  workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
+  policyRiskLevel, workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
 } from '../dist/src/domain/workflow.js';
 import { migrateWorkspace } from '../dist/src/domain/migration.js';
 import { aiWorkflowCoverage, promptResponseContracts } from '../dist/src/domain/ai-contracts.js';
@@ -276,7 +276,14 @@ test('evidence gate rejects dangling source IDs and incomplete provenance', () =
 test('release gate requires every mandatory policy check, not arbitrary 6/8', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = { musicLicensed: 'Licensed music and footage recorded in the project rights log.' };
+  assert.equal(policyRiskLevel(project), 'low');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+  project.policyEvidence = {};
+  assert.equal(policyRiskLevel(project), 'review');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed check requires saved rights evidence/);
+  project.policyEvidence.musicLicensed = 'Licensed music and footage recorded in the project rights log.';
   project.policyChecks.musicLicensed = false;
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed/);
@@ -285,6 +292,7 @@ test('release gate requires every mandatory policy check, not arbitrary 6/8', ()
 test('release gate does not trust source and claim checkboxes without supporting artifacts', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = { musicLicensed: 'Licensed music and footage recorded in the project rights log.' };
   project.sourceIds = [];
   project.factCheckSummary = '';
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);

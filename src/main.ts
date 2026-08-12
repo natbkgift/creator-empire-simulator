@@ -10,7 +10,7 @@ import { routeTitle } from './app/navigation.js';
 import { escapeHtml, todayIso } from './domain/utils.js';
 import { createSeedWorkspace } from './seed/demo.js';
 import { applyChannelFocus, applyProjectFocus, applyPortfolioFocus } from './domain/focus.js';
-import { rebuildWorkflowTasks, rescheduleProjectWorkflow, requiredPolicyChecks } from './domain/workflow.js';
+import { policyRiskLevel, rebuildWorkflowTasks, rescheduleProjectWorkflow } from './domain/workflow.js';
 import { confirmDialog, showToast } from './ui/feedback.js';
 import { activeProject, dailyMission } from './app/selectors.js';
 
@@ -230,7 +230,7 @@ app.addEventListener('click', (event) => {
 });
 
 app.addEventListener('change', (event) => {
-  const target = event.target as HTMLInputElement | HTMLSelectElement;
+  const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
   if (target.dataset.change === Changes.ACTIVE_CHANNEL) {
     if (target.value === 'portfolio') updateWorkspace(applyPortfolioFocus);
     else updateWorkspace((draft) => applyChannelFocus(draft, target.value));
@@ -248,8 +248,19 @@ app.addEventListener('change', (event) => {
       const project = draft.projects.find((item) => item.id === projectId);
       if (!project) return;
       project.policyChecks[key] = (target as HTMLInputElement).checked;
-      const missingMandatory = requiredPolicyChecks.filter((required) => !project.policyChecks[required]);
-      project.riskLevel = missingMandatory.length === 0 ? 'low' : missingMandatory.length >= 4 ? 'high' : 'review';
+      project.riskLevel = policyRiskLevel(project);
+      project.updatedAt = new Date().toISOString();
+      applyProjectFocus(draft, project.id);
+    });
+  } else if (target.dataset.change === Changes.POLICY_EVIDENCE) {
+    const projectId = target.dataset.projectId;
+    const key = target.dataset.evidenceKey;
+    if (!projectId || !key) return;
+    updateWorkspace((draft) => {
+      const project = draft.projects.find((item) => item.id === projectId);
+      if (!project) return;
+      project.policyEvidence = { ...project.policyEvidence, [key]: target.value.trim() };
+      project.riskLevel = policyRiskLevel(project);
       project.updatedAt = new Date().toISOString();
       applyProjectFocus(draft, project.id);
     });

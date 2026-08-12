@@ -25,6 +25,7 @@ import { renderHq } from '../dist/src/features/hq.js';
 import { renderAnalytics } from '../dist/src/features/analytics.js';
 import { renderPrompts } from '../dist/src/features/prompts.js';
 import { renderSettings } from '../dist/src/features/settings.js';
+import { renderPolicy } from '../dist/src/features/policy.js';
 import { routeTitle } from '../dist/src/app/navigation.js';
 import { renderSimpleShell } from '../dist/src/app/simple-shell.js';
 import { renderSimpleCreate, renderSimpleChannels, renderSimpleProjects } from '../dist/src/features/simple.js';
@@ -50,6 +51,23 @@ test('riskChip maps risk levels to appropriate classes and labels', () => {
   assert.ok(riskChip('review').includes('amber') && riskChip('review').includes('Review'));
   assert.ok(riskChip('high').includes('red') && riskChip('high').includes('High'));
   assert.ok(riskChip('blocked').includes('red') && riskChip('blocked').includes('Blocked'));
+});
+
+test('Policy Shield exposes saved music and footage rights evidence for editing', () => {
+  const workspace = createSeedWorkspace();
+  const project = workspace.projects[0];
+  project.policyEvidence = { musicLicensed: 'Track & footage <license>' };
+  const html = renderPolicy(workspace, new URLSearchParams({ project: project.id }));
+  assert.ok(html.includes('data-change="policy-evidence"'));
+  assert.ok(html.includes('data-evidence-key="musicLicensed"'));
+  assert.ok(html.includes('Track &amp; footage &lt;license&gt;'));
+
+  project.policyChecks = { originalScript: true, sourcesPresent: true, claimsClassified: true, aiDisclosureReviewed: true, musicLicensed: true, templateRiskReviewed: true };
+  project.policyEvidence = {};
+  project.riskLevel = 'low';
+  const blockedHtml = renderPolicy(workspace, new URLSearchParams({ project: project.id }));
+  assert.ok(!blockedHtml.includes('>Low<'));
+  assert.ok(blockedHtml.includes('Blocked'));
 });
 
 test('metricCard and metric render structured values with escaping', () => {

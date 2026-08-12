@@ -110,7 +110,7 @@ export interface VideoProject {
   sourceIds: string[]; researchSummary: string; factCheckSummary: string; scriptVersion: number; script: string; hook: string;
   storyboard: string[]; assetPrompts: string[]; capcutBrief: string; promptVersions: string[]; thumbnailVersions: string[];
   publicationLinks: string[]; lessonsLearned: string; analyticsPostmortem: string; repurposingPlan: string;
-  workflowEvents: WorkflowEvent[]; policyChecks: Record<string, boolean>; riskLevel: RiskLevel; createdAt: string; updatedAt: string; isDemo?: boolean;
+  workflowEvents: WorkflowEvent[]; policyChecks: Record<string, boolean>; policyEvidence?: Record<string, string>; riskLevel: RiskLevel; createdAt: string; updatedAt: string; isDemo?: boolean;
   autopilotJobId?: string; autopilotPackage?: AutopilotPackage;
 }
 
