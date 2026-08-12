@@ -26,6 +26,19 @@ const aiProjectId = 'project_ai_boring_task';
 
 const migratedSeed = () => migrateWorkspace(createSeedWorkspace());
 
+const addReviewedMedia = (project) => {
+  const digest = 'a'.repeat(64);
+  project.mediaArtifacts = ['voice', 'captions', 'render'].map((kind) => ({
+    id: `${kind}-${project.id}`, projectId: project.id, kind, sha256: digest, status: 'reviewed',
+    language: project.language, createdAt: '2026-08-12T00:00:00Z',
+  }));
+  project.mediaQa = {
+    reviewedAt: '2026-08-12T00:10:00Z', reviewer: 'owner', result: 'pass',
+    artifactDigests: { voice: digest, captions: digest, render: digest },
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  };
+};
+
 test('request keys survive ambiguous retries and clear only after reconciliation', () => {
   const values = new Map();
   const storage = {
@@ -275,6 +288,7 @@ test('evidence gate rejects dangling source IDs and incomplete provenance', () =
 
 test('release gate requires every mandatory policy check, not arbitrary 6/8', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -301,6 +315,7 @@ test('release gate requires every mandatory policy check, not arbitrary 6/8', ()
 
 test('release gate does not trust source and claim checkboxes without supporting artifacts', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -337,6 +352,7 @@ test('release gate does not trust source and claim checkboxes without supporting
 
 test('release gate requires a saved project disclosure decision for the AI review checkbox', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     musicLicensed: 'Licensed music and footage recorded in the project rights log.',
@@ -356,6 +372,7 @@ test('release gate requires a saved project disclosure decision for the AI revie
 
 test('release gate requires saved project differentiation evidence for the template review checkbox', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -375,6 +392,7 @@ test('release gate requires saved project differentiation evidence for the templ
 
 test('release gate requires explicit applicable or not-applicable decisions for conditional reviews', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -400,6 +418,7 @@ test('release gate requires explicit applicable or not-applicable decisions for 
 
 test('release gate requires current sourced active policy records for every target platform', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -509,6 +528,22 @@ test('media artifact readiness requires project-scoped reviewed voice captions r
   project.mediaQa.checks = { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true };
   project.mediaQa.artifactDigests.render = 'b'.repeat(64);
   assert.equal(mediaArtifactReadiness(project).ready, false);
+});
+
+test('scheduled release is blocked until exact reviewed media artifacts and QA are present', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
+  };
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /reviewed voice artifact/i);
+  addReviewedMedia(project);
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
 });
 
 let passed=0;

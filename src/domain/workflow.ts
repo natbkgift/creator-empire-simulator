@@ -242,6 +242,9 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       check(Boolean(project.policyChecks.templateRiskReviewed && hasPolicyEvidence(project, 'templateRiskReviewed')), 'Template differentiation evidence is saved.', 'The templateRiskReviewed check requires saved differentiation evidence.');
       check(conditionalReviewComplete(project, 'sensitiveContentReviewed'), 'Sensitive-content applicability and review decision is saved.', 'sensitiveContentReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
       check(conditionalReviewComplete(project, 'trademarkReviewed'), 'Trademark applicability and review decision is saved.', 'trademarkReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
+      const media = mediaArtifactReadiness(project);
+      completed.push(...media.completed);
+      blockers.push(...media.blockers);
       [...new Set(project.platforms.flatMap(policyPlatforms))]
         .forEach((platform) => check(
           hasCurrentPolicyRecord(workspace, platform),
