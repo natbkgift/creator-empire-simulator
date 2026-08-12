@@ -84,6 +84,19 @@ test('Policy Shield exposes saved rights and AI disclosure evidence for editing'
   assert.ok(blockedHtml.includes('Blocked'));
 });
 
+test('Policy Shield exposes policy registry source and status without trusting markup', () => {
+  const workspace = createSeedWorkspace();
+  workspace.policies[0].topic = 'Policy <topic>';
+  workspace.policies[0].sourceUrl = 'https://example.com/policy?x=1&y=2';
+  workspace.policies[0].status = 'uncertain';
+  const html = renderPolicy(workspace, new URLSearchParams({ project: workspace.projects[0].id }));
+  assert.ok(html.includes('href="https://example.com/policy?x=1&amp;y=2"'));
+  assert.ok(html.includes('target="_blank"'));
+  assert.ok(html.includes('rel="noopener noreferrer"'));
+  assert.ok(html.includes('Policy &lt;topic&gt;'));
+  assert.ok(html.includes('uncertain'));
+});
+
 test('metricCard and metric render structured values with escaping', () => {
   assert.equal(metricCard(100, 'Total Views'), '<div class="metric-card "><b>100</b><span>Total Views</span></div>');
   assert.equal(metric('Views', 5000, '+10% past week', 'violet'), '<div class="metric violet"><span>Views</span><strong>5000</strong><small>+10% past week</small></div>');

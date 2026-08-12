@@ -85,6 +85,38 @@ const conditionalReviewComplete = (project: VideoProject, key: string): boolean 
   return /^applicable:\s*\S/.test(decision) && project.policyChecks[key] === true;
 };
 
+const policyPlatforms = (value: string): string[] => {
+  const normalized = value.toLowerCase();
+  return ['youtube', 'facebook', 'tiktok', 'instagram'].filter((platform) => normalized.includes(platform));
+};
+
+const isHttpsUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const isCalendarDate = (value: string): boolean => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  if (year < 1) return false;
+  const parsed = new Date(0);
+  parsed.setUTCHours(0, 0, 0, 0);
+  parsed.setUTCFullYear(year, month - 1, day);
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+};
+
+const hasCurrentPolicyRecord = (workspace: Workspace, platform: string): boolean => workspace.policies.some((rule) =>
+  rule.platform === platform
+  && rule.status === 'active'
+  && isHttpsUrl(rule.sourceUrl)
+  && isCalendarDate(rule.lastVerifiedAt),
+);
+
 export const policyRiskLevel = (project: VideoProject): RiskLevel => {
   const missingChecks = requiredPolicyChecks.filter((key) => !project.policyChecks[key]).length;
   const missingEvidence = ['aiDisclosureReviewed', 'musicLicensed', 'templateRiskReviewed']
@@ -166,6 +198,12 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       check(Boolean(project.policyChecks.templateRiskReviewed && hasPolicyEvidence(project, 'templateRiskReviewed')), 'Template differentiation evidence is saved.', 'The templateRiskReviewed check requires saved differentiation evidence.');
       check(conditionalReviewComplete(project, 'sensitiveContentReviewed'), 'Sensitive-content applicability and review decision is saved.', 'sensitiveContentReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
       check(conditionalReviewComplete(project, 'trademarkReviewed'), 'Trademark applicability and review decision is saved.', 'trademarkReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
+      [...new Set(project.platforms.flatMap(policyPlatforms))]
+        .forEach((platform) => check(
+          hasCurrentPolicyRecord(workspace, platform),
+          `A current sourced active policy record covers ${platform}.`,
+          `A current sourced active policy record is required for target platform ${platform}.`,
+        ));
       break;
     }
     case 'published': check(project.publicationLinks.length > 0, 'Publication URL saved.', 'Add at least one real publication URL.'); break;

@@ -398,6 +398,43 @@ test('release gate requires explicit applicable or not-applicable decisions for 
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
 });
 
+test('release gate requires current sourced active policy records for every target platform', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
+  };
+
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+  workspace.policies.filter((rule) => rule.platform === 'tiktok').forEach((rule) => { rule.status = 'uncertain'; });
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /current sourced active policy record.*tiktok/i);
+
+  const tiktokRule = workspace.policies.find((rule) => rule.platform === 'tiktok');
+  tiktokRule.status = 'active';
+  tiktokRule.sourceUrl = '';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  tiktokRule.sourceUrl = 'https://support.tiktok.com/policy';
+  tiktokRule.lastVerifiedAt = 'invalid';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  tiktokRule.sourceUrl = 'https://%';
+  tiktokRule.lastVerifiedAt = '2026-08-12';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  tiktokRule.sourceUrl = 'https://support.tiktok.com/policy';
+  tiktokRule.lastVerifiedAt = '2026-02-30';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  project.platforms = ['YouTube + TikTok'];
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  tiktokRule.lastVerifiedAt = '0001-01-01';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+  tiktokRule.lastVerifiedAt = '0000-01-01';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+});
+
 test('Published with real URL is Video Complete even while Growth Loop remains pending', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]);
   project.status='published'; project.publicationLinks=['https://youtube.com/watch?v=real']; project.productionCompletedAt=new Date().toISOString(); project.growthLoopStatus='pending';
