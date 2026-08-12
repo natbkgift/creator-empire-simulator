@@ -238,7 +238,38 @@ test('evidence gate blocks missing research then passes complete evidence', () =
   const workspace = migratedSeed(); const base = workspace.projects.find((item) => item.id === wojtekProjectId);
   const project = { ...structuredClone(base), status: 'researching', researchSummary: '', factCheckSummary: '', sourceIds: [] };
   assert.equal(workflowReadiness(workspace, project, 'sources-verified').blockers.length, 3);
-  project.researchSummary='summary'; project.factCheckSummary='checked'; project.sourceIds=['source'];
+  const source = workspace.sources.find((item) => item.projectId === project.id);
+  project.researchSummary='summary'; project.factCheckSummary='checked'; project.sourceIds=[source.id];
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, true);
+});
+
+test('evidence gate rejects dangling source IDs and incomplete provenance', () => {
+  const workspace = migratedSeed(); const base = workspace.projects.find((item) => item.id === wojtekProjectId);
+  const project = { ...structuredClone(base), status: 'researching', researchSummary: 'summary', factCheckSummary: 'checked', sourceIds: ['missing-source'] };
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'sources-verified').blockers.join(' '), /provenance/i);
+
+  const validSource = workspace.sources.find((item) => item.projectId === project.id);
+  const foreignSource = { ...validSource, id: 'foreign-source', projectId: 'other-project' };
+  workspace.sources.push(foreignSource);
+  project.sourceIds = [validSource.id, 'missing-source'];
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+  project.sourceIds = [validSource.id, foreignSource.id];
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+
+  workspace.sources.push({ id: 'incomplete-source', projectId: project.id, title: 'Untitled evidence', url: '', publisher: '', accessedAt: '', claimType: 'context', notes: '' });
+  project.sourceIds = ['incomplete-source'];
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'sources-verified').blockers.join(' '), /URL, publisher, and access date/);
+
+  workspace.sources.push({ id: 'malformed-source', projectId: project.id, title: 'Malformed evidence', url: undefined, publisher: 'Publisher', accessedAt: '2026-08-12T00:00:00Z', claimType: 'context', notes: '' });
+  project.sourceIds = ['malformed-source'];
+  assert.doesNotThrow(() => workflowReadiness(workspace, project, 'sources-verified'));
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+
+  workspace.sources.push(null);
+  project.sourceIds = [validSource.id];
+  assert.doesNotThrow(() => workflowReadiness(workspace, project, 'sources-verified'));
   assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, true);
 });
 

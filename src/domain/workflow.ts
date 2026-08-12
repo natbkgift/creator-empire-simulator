@@ -97,7 +97,18 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
     case 'researching': check(Boolean(project.researchSummary.trim()), 'Research summary saved.', 'Paste and apply the topic research result.'); break;
     case 'sources-verified':
       check(Boolean(project.researchSummary.trim()), 'Research summary saved.', 'Complete topic research first.');
-      check(project.sourceIds.length >= 1, `${project.sourceIds.length} source(s) attached.`, 'Attach at least one credible source.');
+      {
+        const sourceIds = new Set(project.sourceIds);
+        const attachedSources = workspace.sources.filter((source) => typeof source === 'object' && source !== null && source.projectId === project.id && sourceIds.has(source.id));
+        check(sourceIds.size >= 1 && attachedSources.length === sourceIds.size, `${attachedSources.length} source(s) attached with project provenance.`, 'Every attached source ID must resolve to this project with provenance.');
+        if (attachedSources.length) {
+          check(
+            attachedSources.every((source) => [source.url, source.publisher, source.accessedAt].every((value) => typeof value === 'string' && Boolean(value.trim()))),
+            'Attached source provenance is complete.',
+            'Every attached source requires a URL, publisher, and access date.',
+          );
+        }
+      }
       check(Boolean(project.factCheckSummary.trim()), 'Fact-check summary saved.', 'Paste and apply the fact-check result.');
       break;
     case 'hook-ready': check(Boolean(project.hook.trim()), 'Hook selected.', 'Save a recommended hook.'); break;
