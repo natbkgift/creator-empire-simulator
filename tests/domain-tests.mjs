@@ -279,17 +279,21 @@ test('release gate requires every mandatory policy check, not arbitrary 6/8', ()
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
     musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
     templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
   };
   assert.equal(policyRiskLevel(project), 'low');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
   project.policyEvidence = {};
-  assert.equal(policyRiskLevel(project), 'review');
+  assert.equal(policyRiskLevel(project), 'high');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed check requires saved rights evidence/);
   project.policyEvidence.aiDisclosureReviewed = 'Reviewed the final edit; no realistic synthetic reconstruction is present.';
   project.policyEvidence.musicLicensed = 'Licensed music and footage recorded in the project rights log.';
+  project.policyEvidence.sensitiveContentReviewed = 'not-applicable: no sensitive content appears.';
   project.policyEvidence.templateRiskReviewed = 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.';
+  project.policyEvidence.trademarkReviewed = 'not-applicable: no trademarked material appears.';
   project.policyChecks.musicLicensed = false;
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed/);
@@ -301,7 +305,9 @@ test('release gate does not trust source and claim checkboxes without supporting
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
     musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
     templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
   };
   project.sourceIds = [];
   project.factCheckSummary = '';
@@ -334,7 +340,9 @@ test('release gate requires a saved project disclosure decision for the AI revie
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
     templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
   };
 
   assert.equal(policyRiskLevel(project), 'review');
@@ -352,6 +360,8 @@ test('release gate requires saved project differentiation evidence for the templ
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
     musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
   };
 
   assert.equal(policyRiskLevel(project), 'review');
@@ -359,6 +369,31 @@ test('release gate requires saved project differentiation evidence for the templ
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /templateRiskReviewed check requires saved differentiation evidence/);
 
   project.policyEvidence.templateRiskReviewed = 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.';
+  assert.equal(policyRiskLevel(project), 'low');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+});
+
+test('release gate requires explicit applicable or not-applicable decisions for conditional reviews', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+  };
+
+  assert.equal(policyRiskLevel(project), 'review');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /sensitiveContentReviewed requires an applicable: or not-applicable: evidence decision/);
+
+  project.policyEvidence.sensitiveContentReviewed = 'not-applicable: no real person, violence, health, financial, or legal claims appear.';
+  project.policyEvidence.trademarkReviewed = 'not-applicable: no logo, trademark, product claim, or packaging appears.';
+  assert.equal(policyRiskLevel(project), 'low');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+
+  project.policyEvidence.trademarkReviewed = 'applicable: a product logo appears at 00:12 and was reviewed.';
+  assert.equal(policyRiskLevel(project), 'review');
+  project.policyChecks.trademarkReviewed = true;
   assert.equal(policyRiskLevel(project), 'low');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
 });

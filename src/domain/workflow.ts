@@ -79,11 +79,19 @@ export const requiredPolicyChecks = [
 const hasPolicyEvidence = (project: VideoProject, key: string): boolean =>
   typeof project.policyEvidence?.[key] === 'string' && Boolean(project.policyEvidence[key].trim());
 
+const conditionalReviewComplete = (project: VideoProject, key: string): boolean => {
+  const decision = typeof project.policyEvidence?.[key] === 'string' ? project.policyEvidence[key].trim().toLowerCase() : '';
+  if (/^not-applicable:\s*\S/.test(decision)) return true;
+  return /^applicable:\s*\S/.test(decision) && project.policyChecks[key] === true;
+};
+
 export const policyRiskLevel = (project: VideoProject): RiskLevel => {
   const missingChecks = requiredPolicyChecks.filter((key) => !project.policyChecks[key]).length;
   const missingEvidence = ['aiDisclosureReviewed', 'musicLicensed', 'templateRiskReviewed']
     .filter((key) => project.policyChecks[key] && !hasPolicyEvidence(project, key)).length;
-  const blockers = missingChecks + missingEvidence;
+  const missingConditionalReviews = ['sensitiveContentReviewed', 'trademarkReviewed']
+    .filter((key) => !conditionalReviewComplete(project, key)).length;
+  const blockers = missingChecks + missingEvidence + missingConditionalReviews;
   return blockers === 0 ? 'low' : blockers >= 4 ? 'high' : 'review';
 };
 
@@ -156,6 +164,8 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       check(Boolean(project.policyChecks.aiDisclosureReviewed && hasPolicyEvidence(project, 'aiDisclosureReviewed')), 'AI disclosure decision is saved.', 'The aiDisclosureReviewed check requires a saved disclosure decision.');
       check(Boolean(project.policyChecks.musicLicensed && hasPolicyEvidence(project, 'musicLicensed')), 'Music and footage rights evidence is saved.', 'The musicLicensed check requires saved rights evidence.');
       check(Boolean(project.policyChecks.templateRiskReviewed && hasPolicyEvidence(project, 'templateRiskReviewed')), 'Template differentiation evidence is saved.', 'The templateRiskReviewed check requires saved differentiation evidence.');
+      check(conditionalReviewComplete(project, 'sensitiveContentReviewed'), 'Sensitive-content applicability and review decision is saved.', 'sensitiveContentReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
+      check(conditionalReviewComplete(project, 'trademarkReviewed'), 'Trademark applicability and review decision is saved.', 'trademarkReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
       break;
     }
     case 'published': check(project.publicationLinks.length > 0, 'Publication URL saved.', 'Add at least one real publication URL.'); break;
