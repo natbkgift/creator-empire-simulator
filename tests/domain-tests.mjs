@@ -276,13 +276,17 @@ test('evidence gate rejects dangling source IDs and incomplete provenance', () =
 test('release gate requires every mandatory policy check, not arbitrary 6/8', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
-  project.policyEvidence = { musicLicensed: 'Licensed music and footage recorded in the project rights log.' };
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+  };
   assert.equal(policyRiskLevel(project), 'low');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
   project.policyEvidence = {};
   assert.equal(policyRiskLevel(project), 'review');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed check requires saved rights evidence/);
+  project.policyEvidence.aiDisclosureReviewed = 'Reviewed the final edit; no realistic synthetic reconstruction is present.';
   project.policyEvidence.musicLicensed = 'Licensed music and footage recorded in the project rights log.';
   project.policyChecks.musicLicensed = false;
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
@@ -292,7 +296,10 @@ test('release gate requires every mandatory policy check, not arbitrary 6/8', ()
 test('release gate does not trust source and claim checkboxes without supporting artifacts', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
-  project.policyEvidence = { musicLicensed: 'Licensed music and footage recorded in the project rights log.' };
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+  };
   project.sourceIds = [];
   project.factCheckSummary = '';
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
@@ -317,6 +324,20 @@ test('release gate does not trust source and claim checkboxes without supporting
   project.script = '';
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /originalScript check requires a saved script artifact/);
+});
+
+test('release gate requires a saved project disclosure decision for the AI review checkbox', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = { musicLicensed: 'Licensed music and footage recorded in the project rights log.' };
+
+  assert.equal(policyRiskLevel(project), 'review');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /aiDisclosureReviewed check requires a saved disclosure decision/);
+
+  project.policyEvidence.aiDisclosureReviewed = 'Reviewed the final edit; realistic synthetic reconstruction is disclosed at 00:18.';
+  assert.equal(policyRiskLevel(project), 'low');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
 });
 
 test('Published with real URL is Video Complete even while Growth Loop remains pending', () => {

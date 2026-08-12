@@ -76,11 +76,14 @@ export const requiredPolicyChecks = [
   'originalScript', 'sourcesPresent', 'claimsClassified', 'aiDisclosureReviewed', 'musicLicensed', 'templateRiskReviewed',
 ] as const;
 
+const hasPolicyEvidence = (project: VideoProject, key: string): boolean =>
+  typeof project.policyEvidence?.[key] === 'string' && Boolean(project.policyEvidence[key].trim());
+
 export const policyRiskLevel = (project: VideoProject): RiskLevel => {
   const missingChecks = requiredPolicyChecks.filter((key) => !project.policyChecks[key]).length;
-  const missingRightsEvidence = project.policyChecks.musicLicensed
-    && !(typeof project.policyEvidence?.musicLicensed === 'string' && project.policyEvidence.musicLicensed.trim()) ? 1 : 0;
-  const blockers = missingChecks + missingRightsEvidence;
+  const missingEvidence = ['aiDisclosureReviewed', 'musicLicensed']
+    .filter((key) => project.policyChecks[key] && !hasPolicyEvidence(project, key)).length;
+  const blockers = missingChecks + missingEvidence;
   return blockers === 0 ? 'low' : blockers >= 4 ? 'high' : 'review';
 };
 
@@ -150,7 +153,8 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       check(Boolean(project.policyChecks.sourcesPresent && sourceEvidence.resolved && sourceEvidence.provenanceComplete), 'Source evidence supports the release check.', 'The sourcesPresent check requires complete project source evidence.');
       check(Boolean(project.policyChecks.claimsClassified && typeof project.factCheckSummary === 'string' && project.factCheckSummary.trim()), 'Claim classification has a fact-check artifact.', 'The claimsClassified check requires a saved fact-check artifact.');
       check(Boolean(project.policyChecks.originalScript && typeof project.script === 'string' && project.script.trim()), 'Original script has a saved artifact.', 'The originalScript check requires a saved script artifact.');
-      check(Boolean(project.policyChecks.musicLicensed && typeof project.policyEvidence?.musicLicensed === 'string' && project.policyEvidence.musicLicensed.trim()), 'Music and footage rights evidence is saved.', 'The musicLicensed check requires saved rights evidence.');
+      check(Boolean(project.policyChecks.aiDisclosureReviewed && hasPolicyEvidence(project, 'aiDisclosureReviewed')), 'AI disclosure decision is saved.', 'The aiDisclosureReviewed check requires a saved disclosure decision.');
+      check(Boolean(project.policyChecks.musicLicensed && hasPolicyEvidence(project, 'musicLicensed')), 'Music and footage rights evidence is saved.', 'The musicLicensed check requires saved rights evidence.');
       break;
     }
     case 'published': check(project.publicationLinks.length > 0, 'Publication URL saved.', 'Add at least one real publication URL.'); break;

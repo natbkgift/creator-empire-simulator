@@ -53,12 +53,17 @@ test('riskChip maps risk levels to appropriate classes and labels', () => {
   assert.ok(riskChip('blocked').includes('red') && riskChip('blocked').includes('Blocked'));
 });
 
-test('Policy Shield exposes saved music and footage rights evidence for editing', () => {
+test('Policy Shield exposes saved rights and AI disclosure evidence for editing', () => {
   const workspace = createSeedWorkspace();
   const project = workspace.projects[0];
-  project.policyEvidence = { musicLicensed: 'Track & footage <license>' };
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Realistic reconstruction <disclosed at 00:18>',
+    musicLicensed: 'Track & footage <license>',
+  };
   const html = renderPolicy(workspace, new URLSearchParams({ project: project.id }));
   assert.ok(html.includes('data-change="policy-evidence"'));
+  assert.ok(html.includes('data-evidence-key="aiDisclosureReviewed"'));
+  assert.ok(html.includes('Realistic reconstruction &lt;disclosed at 00:18&gt;'));
   assert.ok(html.includes('data-evidence-key="musicLicensed"'));
   assert.ok(html.includes('Track &amp; footage &lt;license&gt;'));
 
