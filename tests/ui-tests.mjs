@@ -59,6 +59,7 @@ test('Policy Shield exposes saved rights and AI disclosure evidence for editing'
   project.policyEvidence = {
     aiDisclosureReviewed: 'Realistic reconstruction <disclosed at 00:18>',
     musicLicensed: 'Track & footage <license>',
+    templateRiskReviewed: 'Distinct opening & scene order <reviewed>',
   };
   const html = renderPolicy(workspace, new URLSearchParams({ project: project.id }));
   assert.ok(html.includes('data-change="policy-evidence"'));
@@ -66,6 +67,8 @@ test('Policy Shield exposes saved rights and AI disclosure evidence for editing'
   assert.ok(html.includes('Realistic reconstruction &lt;disclosed at 00:18&gt;'));
   assert.ok(html.includes('data-evidence-key="musicLicensed"'));
   assert.ok(html.includes('Track &amp; footage &lt;license&gt;'));
+  assert.ok(html.includes('data-evidence-key="templateRiskReviewed"'));
+  assert.ok(html.includes('Distinct opening &amp; scene order &lt;reviewed&gt;'));
 
   project.policyChecks = { originalScript: true, sourcesPresent: true, claimsClassified: true, aiDisclosureReviewed: true, musicLicensed: true, templateRiskReviewed: true };
   project.policyEvidence = {};

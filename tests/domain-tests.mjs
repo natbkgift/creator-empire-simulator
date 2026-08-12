@@ -279,6 +279,7 @@ test('release gate requires every mandatory policy check, not arbitrary 6/8', ()
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
     musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
   };
   assert.equal(policyRiskLevel(project), 'low');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
@@ -288,6 +289,7 @@ test('release gate requires every mandatory policy check, not arbitrary 6/8', ()
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed check requires saved rights evidence/);
   project.policyEvidence.aiDisclosureReviewed = 'Reviewed the final edit; no realistic synthetic reconstruction is present.';
   project.policyEvidence.musicLicensed = 'Licensed music and footage recorded in the project rights log.';
+  project.policyEvidence.templateRiskReviewed = 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.';
   project.policyChecks.musicLicensed = false;
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed/);
@@ -299,6 +301,7 @@ test('release gate does not trust source and claim checkboxes without supporting
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
     musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
   };
   project.sourceIds = [];
   project.factCheckSummary = '';
@@ -329,13 +332,33 @@ test('release gate does not trust source and claim checkboxes without supporting
 test('release gate requires a saved project disclosure decision for the AI review checkbox', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
-  project.policyEvidence = { musicLicensed: 'Licensed music and footage recorded in the project rights log.' };
+  project.policyEvidence = {
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+  };
 
   assert.equal(policyRiskLevel(project), 'review');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /aiDisclosureReviewed check requires a saved disclosure decision/);
 
   project.policyEvidence.aiDisclosureReviewed = 'Reviewed the final edit; realistic synthetic reconstruction is disclosed at 00:18.';
+  assert.equal(policyRiskLevel(project), 'low');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+});
+
+test('release gate requires saved project differentiation evidence for the template review checkbox', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+  };
+
+  assert.equal(policyRiskLevel(project), 'review');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /templateRiskReviewed check requires saved differentiation evidence/);
+
+  project.policyEvidence.templateRiskReviewed = 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.';
   assert.equal(policyRiskLevel(project), 'low');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
 });

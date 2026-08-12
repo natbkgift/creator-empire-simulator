@@ -81,7 +81,7 @@ const hasPolicyEvidence = (project: VideoProject, key: string): boolean =>
 
 export const policyRiskLevel = (project: VideoProject): RiskLevel => {
   const missingChecks = requiredPolicyChecks.filter((key) => !project.policyChecks[key]).length;
-  const missingEvidence = ['aiDisclosureReviewed', 'musicLicensed']
+  const missingEvidence = ['aiDisclosureReviewed', 'musicLicensed', 'templateRiskReviewed']
     .filter((key) => project.policyChecks[key] && !hasPolicyEvidence(project, key)).length;
   const blockers = missingChecks + missingEvidence;
   return blockers === 0 ? 'low' : blockers >= 4 ? 'high' : 'review';
@@ -155,6 +155,7 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       check(Boolean(project.policyChecks.originalScript && typeof project.script === 'string' && project.script.trim()), 'Original script has a saved artifact.', 'The originalScript check requires a saved script artifact.');
       check(Boolean(project.policyChecks.aiDisclosureReviewed && hasPolicyEvidence(project, 'aiDisclosureReviewed')), 'AI disclosure decision is saved.', 'The aiDisclosureReviewed check requires a saved disclosure decision.');
       check(Boolean(project.policyChecks.musicLicensed && hasPolicyEvidence(project, 'musicLicensed')), 'Music and footage rights evidence is saved.', 'The musicLicensed check requires saved rights evidence.');
+      check(Boolean(project.policyChecks.templateRiskReviewed && hasPolicyEvidence(project, 'templateRiskReviewed')), 'Template differentiation evidence is saved.', 'The templateRiskReviewed check requires saved differentiation evidence.');
       break;
     }
     case 'published': check(project.publicationLinks.length > 0, 'Publication URL saved.', 'Add at least one real publication URL.'); break;
