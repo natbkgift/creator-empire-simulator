@@ -75,6 +75,21 @@ export const requiredPolicyChecks = [
   'originalScript', 'sourcesPresent', 'claimsClassified', 'aiDisclosureReviewed', 'musicLicensed', 'templateRiskReviewed',
 ] as const;
 
+const projectSourceEvidence = (workspace: Workspace, project: VideoProject): {
+  attachedCount: number;
+  provenanceComplete: boolean;
+  resolved: boolean;
+} => {
+  const sourceIds = new Set(Array.isArray(project.sourceIds) ? project.sourceIds.filter((id) => typeof id === 'string' && Boolean(id)) : []);
+  const attachedSources = workspace.sources.filter((source) => typeof source === 'object' && source !== null && source.projectId === project.id && sourceIds.has(source.id));
+  return {
+    attachedCount: attachedSources.length,
+    resolved: sourceIds.size >= 1 && attachedSources.length === sourceIds.size,
+    provenanceComplete: attachedSources.length >= 1
+      && attachedSources.every((source) => [source.url, source.publisher, source.accessedAt].every((value) => typeof value === 'string' && Boolean(value.trim()))),
+  };
+};
+
 export const isProductionComplete = (project: VideoProject): boolean =>
   Boolean(project.productionCompletedAt || (workflowStageRank(project.status) >= workflowStageRank('published') && project.publicationLinks.length));
 
@@ -98,12 +113,11 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
     case 'sources-verified':
       check(Boolean(project.researchSummary.trim()), 'Research summary saved.', 'Complete topic research first.');
       {
-        const sourceIds = new Set(project.sourceIds);
-        const attachedSources = workspace.sources.filter((source) => typeof source === 'object' && source !== null && source.projectId === project.id && sourceIds.has(source.id));
-        check(sourceIds.size >= 1 && attachedSources.length === sourceIds.size, `${attachedSources.length} source(s) attached with project provenance.`, 'Every attached source ID must resolve to this project with provenance.');
-        if (attachedSources.length) {
+        const evidence = projectSourceEvidence(workspace, project);
+        check(evidence.resolved, `${evidence.attachedCount} source(s) attached with project provenance.`, 'Every attached source ID must resolve to this project with provenance.');
+        if (evidence.attachedCount) {
           check(
-            attachedSources.every((source) => [source.url, source.publisher, source.accessedAt].every((value) => typeof value === 'string' && Boolean(value.trim()))),
+            evidence.provenanceComplete,
             'Attached source provenance is complete.',
             'Every attached source requires a URL, publisher, and access date.',
           );
@@ -123,6 +137,9 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       check(project.riskLevel === 'low', 'Policy risk is Low.', 'Resolve Policy Shield until risk is Low.');
       const missing = requiredPolicyChecks.filter((key) => !project.policyChecks[key]);
       check(missing.length === 0, 'All mandatory policy checks passed.', `Mandatory checks missing: ${missing.join(', ')}`);
+      const sourceEvidence = projectSourceEvidence(workspace, project);
+      check(Boolean(project.policyChecks.sourcesPresent && sourceEvidence.resolved && sourceEvidence.provenanceComplete), 'Source evidence supports the release check.', 'The sourcesPresent check requires complete project source evidence.');
+      check(Boolean(project.policyChecks.claimsClassified && typeof project.factCheckSummary === 'string' && project.factCheckSummary.trim()), 'Claim classification has a fact-check artifact.', 'The claimsClassified check requires a saved fact-check artifact.');
       break;
     }
     case 'published': check(project.publicationLinks.length > 0, 'Publication URL saved.', 'Add at least one real publication URL.'); break;

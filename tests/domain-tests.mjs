@@ -282,6 +282,30 @@ test('release gate requires every mandatory policy check, not arbitrary 6/8', ()
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed/);
 });
 
+test('release gate does not trust source and claim checkboxes without supporting artifacts', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.sourceIds = [];
+  project.factCheckSummary = '';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /source evidence/i);
+
+  const source = workspace.sources.find((item) => item.projectId === project.id);
+  project.sourceIds = [source.id];
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /fact-check artifact/i);
+
+  project.factCheckSummary = 'Claims classified as documented, reported, disputed, or unsupported.';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+
+  project.sourceIds = [source.id, 'missing-source'];
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  project.sourceIds = [source.id];
+  project.factCheckSummary = 123;
+  assert.doesNotThrow(() => workflowReadiness(workspace, project, 'scheduled'));
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+});
+
 test('Published with real URL is Video Complete even while Growth Loop remains pending', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]);
   project.status='published'; project.publicationLinks=['https://youtube.com/watch?v=real']; project.productionCompletedAt=new Date().toISOString(); project.growthLoopStatus='pending';
