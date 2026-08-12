@@ -81,6 +81,7 @@ export const Changes = {
   ACTIVE_PROJECT: 'active-project',
   POLICY_PROJECT: 'policy-project',
   POLICY_CHECK: 'policy-check',
+  POLICY_EVIDENCE: 'policy-evidence',
 } as const;
 
 export type ChangeType = typeof Changes[keyof typeof Changes];

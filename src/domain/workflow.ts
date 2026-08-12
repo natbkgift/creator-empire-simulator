@@ -3,6 +3,7 @@ import type {
   MissionRoute,
   ProjectStatus,
   PromptType,
+  RiskLevel,
   VideoProject,
   WorkflowEvent,
   Workspace,
@@ -75,6 +76,72 @@ export const requiredPolicyChecks = [
   'originalScript', 'sourcesPresent', 'claimsClassified', 'aiDisclosureReviewed', 'musicLicensed', 'templateRiskReviewed',
 ] as const;
 
+const hasPolicyEvidence = (project: VideoProject, key: string): boolean =>
+  typeof project.policyEvidence?.[key] === 'string' && Boolean(project.policyEvidence[key].trim());
+
+const conditionalReviewComplete = (project: VideoProject, key: string): boolean => {
+  const decision = typeof project.policyEvidence?.[key] === 'string' ? project.policyEvidence[key].trim().toLowerCase() : '';
+  if (/^not-applicable:\s*\S/.test(decision)) return true;
+  return /^applicable:\s*\S/.test(decision) && project.policyChecks[key] === true;
+};
+
+const policyPlatforms = (value: string): string[] => {
+  const normalized = value.toLowerCase();
+  return ['youtube', 'facebook', 'tiktok', 'instagram'].filter((platform) => normalized.includes(platform));
+};
+
+const isHttpsUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const isCalendarDate = (value: string): boolean => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  if (year < 1) return false;
+  const parsed = new Date(0);
+  parsed.setUTCHours(0, 0, 0, 0);
+  parsed.setUTCFullYear(year, month - 1, day);
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+};
+
+const hasCurrentPolicyRecord = (workspace: Workspace, platform: string): boolean => workspace.policies.some((rule) =>
+  rule.platform === platform
+  && rule.status === 'active'
+  && isHttpsUrl(rule.sourceUrl)
+  && isCalendarDate(rule.lastVerifiedAt),
+);
+
+export const policyRiskLevel = (project: VideoProject): RiskLevel => {
+  const missingChecks = requiredPolicyChecks.filter((key) => !project.policyChecks[key]).length;
+  const missingEvidence = ['aiDisclosureReviewed', 'musicLicensed', 'templateRiskReviewed']
+    .filter((key) => project.policyChecks[key] && !hasPolicyEvidence(project, key)).length;
+  const missingConditionalReviews = ['sensitiveContentReviewed', 'trademarkReviewed']
+    .filter((key) => !conditionalReviewComplete(project, key)).length;
+  const blockers = missingChecks + missingEvidence + missingConditionalReviews;
+  return blockers === 0 ? 'low' : blockers >= 4 ? 'high' : 'review';
+};
+
+const projectSourceEvidence = (workspace: Workspace, project: VideoProject): {
+  attachedCount: number;
+  provenanceComplete: boolean;
+  resolved: boolean;
+} => {
+  const sourceIds = new Set(Array.isArray(project.sourceIds) ? project.sourceIds.filter((id) => typeof id === 'string' && Boolean(id)) : []);
+  const attachedSources = workspace.sources.filter((source) => typeof source === 'object' && source !== null && source.projectId === project.id && sourceIds.has(source.id));
+  return {
+    attachedCount: attachedSources.length,
+    resolved: sourceIds.size >= 1 && attachedSources.length === sourceIds.size,
+    provenanceComplete: attachedSources.length >= 1
+      && attachedSources.every((source) => [source.url, source.publisher, source.accessedAt].every((value) => typeof value === 'string' && Boolean(value.trim()))),
+  };
+};
+
 export const isProductionComplete = (project: VideoProject): boolean =>
   Boolean(project.productionCompletedAt || (workflowStageRank(project.status) >= workflowStageRank('published') && project.publicationLinks.length));
 
@@ -97,7 +164,17 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
     case 'researching': check(Boolean(project.researchSummary.trim()), 'Research summary saved.', 'Paste and apply the topic research result.'); break;
     case 'sources-verified':
       check(Boolean(project.researchSummary.trim()), 'Research summary saved.', 'Complete topic research first.');
-      check(project.sourceIds.length >= 1, `${project.sourceIds.length} source(s) attached.`, 'Attach at least one credible source.');
+      {
+        const evidence = projectSourceEvidence(workspace, project);
+        check(evidence.resolved, `${evidence.attachedCount} source(s) attached with project provenance.`, 'Every attached source ID must resolve to this project with provenance.');
+        if (evidence.attachedCount) {
+          check(
+            evidence.provenanceComplete,
+            'Attached source provenance is complete.',
+            'Every attached source requires a URL, publisher, and access date.',
+          );
+        }
+      }
       check(Boolean(project.factCheckSummary.trim()), 'Fact-check summary saved.', 'Paste and apply the fact-check result.');
       break;
     case 'hook-ready': check(Boolean(project.hook.trim()), 'Hook selected.', 'Save a recommended hook.'); break;
@@ -112,6 +189,21 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       check(project.riskLevel === 'low', 'Policy risk is Low.', 'Resolve Policy Shield until risk is Low.');
       const missing = requiredPolicyChecks.filter((key) => !project.policyChecks[key]);
       check(missing.length === 0, 'All mandatory policy checks passed.', `Mandatory checks missing: ${missing.join(', ')}`);
+      const sourceEvidence = projectSourceEvidence(workspace, project);
+      check(Boolean(project.policyChecks.sourcesPresent && sourceEvidence.resolved && sourceEvidence.provenanceComplete), 'Source evidence supports the release check.', 'The sourcesPresent check requires complete project source evidence.');
+      check(Boolean(project.policyChecks.claimsClassified && typeof project.factCheckSummary === 'string' && project.factCheckSummary.trim()), 'Claim classification has a fact-check artifact.', 'The claimsClassified check requires a saved fact-check artifact.');
+      check(Boolean(project.policyChecks.originalScript && typeof project.script === 'string' && project.script.trim()), 'Original script has a saved artifact.', 'The originalScript check requires a saved script artifact.');
+      check(Boolean(project.policyChecks.aiDisclosureReviewed && hasPolicyEvidence(project, 'aiDisclosureReviewed')), 'AI disclosure decision is saved.', 'The aiDisclosureReviewed check requires a saved disclosure decision.');
+      check(Boolean(project.policyChecks.musicLicensed && hasPolicyEvidence(project, 'musicLicensed')), 'Music and footage rights evidence is saved.', 'The musicLicensed check requires saved rights evidence.');
+      check(Boolean(project.policyChecks.templateRiskReviewed && hasPolicyEvidence(project, 'templateRiskReviewed')), 'Template differentiation evidence is saved.', 'The templateRiskReviewed check requires saved differentiation evidence.');
+      check(conditionalReviewComplete(project, 'sensitiveContentReviewed'), 'Sensitive-content applicability and review decision is saved.', 'sensitiveContentReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
+      check(conditionalReviewComplete(project, 'trademarkReviewed'), 'Trademark applicability and review decision is saved.', 'trademarkReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
+      [...new Set(project.platforms.flatMap(policyPlatforms))]
+        .forEach((platform) => check(
+          hasCurrentPolicyRecord(workspace, platform),
+          `A current sourced active policy record covers ${platform}.`,
+          `A current sourced active policy record is required for target platform ${platform}.`,
+        ));
       break;
     }
     case 'published': check(project.publicationLinks.length > 0, 'Publication URL saved.', 'Add at least one real publication URL.'); break;

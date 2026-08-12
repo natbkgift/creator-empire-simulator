@@ -4,7 +4,7 @@ import { navigate } from '../app/router.js';
 import { activeProject, capacityStats } from '../app/selectors.js';
 import { applyChannelFocus, applyProjectFocus } from '../domain/focus.js';
 import { generateBlueprint } from '../domain/blueprint.js';
-import { buildWorkflowTasks, recordWorkflowEvent, syncNextWorkflowMission, taskIsUnlocked, workflowReadiness, requiredPolicyChecks } from '../domain/workflow.js';
+import { buildWorkflowTasks, policyRiskLevel, recordWorkflowEvent, syncNextWorkflowMission, taskIsUnlocked, workflowReadiness } from '../domain/workflow.js';
 import { addDays, slugify, todayIso, uid } from '../domain/utils.js';
 import { showToast } from '../ui/feedback.js';
 import { defaultSimulationInputs, runSimulation } from '../domain/simulator.js';
@@ -233,8 +233,7 @@ export const addMonetizationPath = (form: HTMLFormElement): void => {
 export const recalculateProjectRisk = (projectId: string): void => {
   updateWorkspace((draft) => {
     const project = draft.projects.find((item) => item.id === projectId); if (!project) return;
-    const missing = requiredPolicyChecks.filter((key) => !project.policyChecks[key]);
-    const risk: RiskLevel = missing.length === 0 ? 'low' : missing.length >= 4 ? 'high' : 'review';
+    const risk: RiskLevel = policyRiskLevel(project);
     project.riskLevel = risk; project.updatedAt = new Date().toISOString(); applyProjectFocus(draft, project.id);
     if (risk === 'low') { awardXp(draft, `policy:${project.id}`, 70, 'research'); const achievement = draft.achievements.find((item) => item.id === 'achievement_source_guard'); if (achievement && !achievement.unlockedAt) achievement.unlockedAt = new Date().toISOString(); }
   });

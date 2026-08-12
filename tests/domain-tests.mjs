@@ -11,7 +11,7 @@ import { applyChannelFocus, applyPortfolioFocus, applyProjectFocus, focusedChann
 import {
   buildWorkflowTasks, promptCompletionStatus, rebuildWorkflowTasks, rescheduleProjectWorkflow,
   requiredPolicyChecks, isProductionComplete, syncNextWorkflowMission, taskIsUnlocked,
-  workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
+  policyRiskLevel, workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
 } from '../dist/src/domain/workflow.js';
 import { migrateWorkspace } from '../dist/src/domain/migration.js';
 import { aiWorkflowCoverage, promptResponseContracts } from '../dist/src/domain/ai-contracts.js';
@@ -238,17 +238,201 @@ test('evidence gate blocks missing research then passes complete evidence', () =
   const workspace = migratedSeed(); const base = workspace.projects.find((item) => item.id === wojtekProjectId);
   const project = { ...structuredClone(base), status: 'researching', researchSummary: '', factCheckSummary: '', sourceIds: [] };
   assert.equal(workflowReadiness(workspace, project, 'sources-verified').blockers.length, 3);
-  project.researchSummary='summary'; project.factCheckSummary='checked'; project.sourceIds=['source'];
+  const source = workspace.sources.find((item) => item.projectId === project.id);
+  project.researchSummary='summary'; project.factCheckSummary='checked'; project.sourceIds=[source.id];
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, true);
+});
+
+test('evidence gate rejects dangling source IDs and incomplete provenance', () => {
+  const workspace = migratedSeed(); const base = workspace.projects.find((item) => item.id === wojtekProjectId);
+  const project = { ...structuredClone(base), status: 'researching', researchSummary: 'summary', factCheckSummary: 'checked', sourceIds: ['missing-source'] };
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'sources-verified').blockers.join(' '), /provenance/i);
+
+  const validSource = workspace.sources.find((item) => item.projectId === project.id);
+  const foreignSource = { ...validSource, id: 'foreign-source', projectId: 'other-project' };
+  workspace.sources.push(foreignSource);
+  project.sourceIds = [validSource.id, 'missing-source'];
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+  project.sourceIds = [validSource.id, foreignSource.id];
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+
+  workspace.sources.push({ id: 'incomplete-source', projectId: project.id, title: 'Untitled evidence', url: '', publisher: '', accessedAt: '', claimType: 'context', notes: '' });
+  project.sourceIds = ['incomplete-source'];
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'sources-verified').blockers.join(' '), /URL, publisher, and access date/);
+
+  workspace.sources.push({ id: 'malformed-source', projectId: project.id, title: 'Malformed evidence', url: undefined, publisher: 'Publisher', accessedAt: '2026-08-12T00:00:00Z', claimType: 'context', notes: '' });
+  project.sourceIds = ['malformed-source'];
+  assert.doesNotThrow(() => workflowReadiness(workspace, project, 'sources-verified'));
+  assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, false);
+
+  workspace.sources.push(null);
+  project.sourceIds = [validSource.id];
+  assert.doesNotThrow(() => workflowReadiness(workspace, project, 'sources-verified'));
   assert.equal(workflowReadiness(workspace, project, 'sources-verified').ready, true);
 });
 
 test('release gate requires every mandatory policy check, not arbitrary 6/8', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
+  };
+  assert.equal(policyRiskLevel(project), 'low');
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+  project.policyEvidence = {};
+  assert.equal(policyRiskLevel(project), 'high');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed check requires saved rights evidence/);
+  project.policyEvidence.aiDisclosureReviewed = 'Reviewed the final edit; no realistic synthetic reconstruction is present.';
+  project.policyEvidence.musicLicensed = 'Licensed music and footage recorded in the project rights log.';
+  project.policyEvidence.sensitiveContentReviewed = 'not-applicable: no sensitive content appears.';
+  project.policyEvidence.templateRiskReviewed = 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.';
+  project.policyEvidence.trademarkReviewed = 'not-applicable: no trademarked material appears.';
   project.policyChecks.musicLicensed = false;
   assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
   assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /musicLicensed/);
+});
+
+test('release gate does not trust source and claim checkboxes without supporting artifacts', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
+  };
+  project.sourceIds = [];
+  project.factCheckSummary = '';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /source evidence/i);
+
+  const source = workspace.sources.find((item) => item.projectId === project.id);
+  project.sourceIds = [source.id];
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /fact-check artifact/i);
+
+  project.factCheckSummary = 'Claims classified as documented, reported, disputed, or unsupported.';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+
+  project.sourceIds = [source.id, 'missing-source'];
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  project.sourceIds = [source.id];
+  project.factCheckSummary = 123;
+  assert.doesNotThrow(() => workflowReadiness(workspace, project, 'scheduled'));
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+
+  project.factCheckSummary = 'Claims classified as documented, reported, disputed, or unsupported.';
+  project.script = '';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /originalScript check requires a saved script artifact/);
+});
+
+test('release gate requires a saved project disclosure decision for the AI review checkbox', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
+  };
+
+  assert.equal(policyRiskLevel(project), 'review');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /aiDisclosureReviewed check requires a saved disclosure decision/);
+
+  project.policyEvidence.aiDisclosureReviewed = 'Reviewed the final edit; realistic synthetic reconstruction is disclosed at 00:18.';
+  assert.equal(policyRiskLevel(project), 'low');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+});
+
+test('release gate requires saved project differentiation evidence for the template review checkbox', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
+  };
+
+  assert.equal(policyRiskLevel(project), 'review');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /templateRiskReviewed check requires saved differentiation evidence/);
+
+  project.policyEvidence.templateRiskReviewed = 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.';
+  assert.equal(policyRiskLevel(project), 'low');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+});
+
+test('release gate requires explicit applicable or not-applicable decisions for conditional reviews', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+  };
+
+  assert.equal(policyRiskLevel(project), 'review');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /sensitiveContentReviewed requires an applicable: or not-applicable: evidence decision/);
+
+  project.policyEvidence.sensitiveContentReviewed = 'not-applicable: no real person, violence, health, financial, or legal claims appear.';
+  project.policyEvidence.trademarkReviewed = 'not-applicable: no logo, trademark, product claim, or packaging appears.';
+  assert.equal(policyRiskLevel(project), 'low');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+
+  project.policyEvidence.trademarkReviewed = 'applicable: a product logo appears at 00:12 and was reviewed.';
+  assert.equal(policyRiskLevel(project), 'review');
+  project.policyChecks.trademarkReviewed = true;
+  assert.equal(policyRiskLevel(project), 'low');
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+});
+
+test('release gate requires current sourced active policy records for every target platform', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
+  };
+
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+  workspace.policies.filter((rule) => rule.platform === 'tiktok').forEach((rule) => { rule.status = 'uncertain'; });
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /current sourced active policy record.*tiktok/i);
+
+  const tiktokRule = workspace.policies.find((rule) => rule.platform === 'tiktok');
+  tiktokRule.status = 'active';
+  tiktokRule.sourceUrl = '';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  tiktokRule.sourceUrl = 'https://support.tiktok.com/policy';
+  tiktokRule.lastVerifiedAt = 'invalid';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  tiktokRule.sourceUrl = 'https://%';
+  tiktokRule.lastVerifiedAt = '2026-08-12';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  tiktokRule.sourceUrl = 'https://support.tiktok.com/policy';
+  tiktokRule.lastVerifiedAt = '2026-02-30';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  project.platforms = ['YouTube + TikTok'];
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  tiktokRule.lastVerifiedAt = '0001-01-01';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
+  tiktokRule.lastVerifiedAt = '0000-01-01';
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
 });
 
 test('Published with real URL is Video Complete even while Growth Loop remains pending', () => {
