@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import {
   bundlePrivateTemplate,
   finishRenderCleanup,
+  PRIVATE_RENDER_CONCURRENCY,
   prepareRenderJob,
   publishOutputNoClobber,
   renderPrivate,
@@ -234,6 +235,10 @@ test('private render command fails closed for non-MP4 output', async () => {
   } finally {
     await cleanupFixture(value);
   }
+});
+
+test('private render concurrency is fixed at one browser renderer', () => {
+  assert.equal(PRIVATE_RENDER_CONCURRENCY, 1);
 });
 
 let passed = 0;

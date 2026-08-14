@@ -17,6 +17,7 @@ const MAX_AUDIO_BYTES = 256 * 1024 * 1024;
 const MAX_CAPTION_BYTES = 2 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const READ_CHUNK_BYTES = 64 * 1024;
+export const PRIVATE_RENDER_CONCURRENCY = 1;
 
 const hashFile = async (path) => new Promise((resolveHash, reject) => {
   const hash = createHash('sha256');
@@ -232,6 +233,7 @@ export const renderPrivate = async (manifestPath, outputPath) => {
       serveUrl,
       codec: 'h264',
       audioCodec: 'aac',
+      concurrency: PRIVATE_RENDER_CONCURRENCY,
       outputLocation: temporaryOutput,
       inputProps,
       logLevel: 'warn',
