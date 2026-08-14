@@ -17,6 +17,7 @@ import { migrateWorkspace } from '../dist/src/domain/migration.js';
 import { aiWorkflowCoverage, promptResponseContracts } from '../dist/src/domain/ai-contracts.js';
 import { clearPendingRequest, clearRequestKey, getOrCreateRequestKey, loadPendingRequest, peekRequestKey, requestFingerprint, savePendingRequest } from '../dist/src/domain/request-idempotency.js';
 import { isValidReviewTimestamp, saveManualMediaEvidence } from '../dist/src/domain/media-evidence.js';
+import { createRenderManifest } from '../dist/src/domain/render-manifest.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -39,6 +40,98 @@ const addReviewedMedia = (project) => {
     checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
   };
 };
+
+test('render manifest binds one job to exact vertical audio captions and disclosure', () => {
+  const audioDigest = '1'.repeat(64);
+  const captionsDigest = '2'.repeat(64);
+  const inputRoot = '/private/input/project-g05-en/job-g05-en-001';
+  const result = createRenderManifest({
+    jobId: 'job-g05-en-001',
+    projectId: 'project-g05-en',
+    inputRoot,
+    language: 'en',
+    durationSeconds: 44.803,
+    audio: { path: `${inputRoot}/en-US.wav`, sha256: audioDigest },
+    captions: { path: `${inputRoot}/en-US.srt`, sha256: captionsDigest },
+    syntheticMediaDisclosure: 'AI-generated narration and visuals.',
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.manifest, {
+    schemaVersion: 1,
+    jobId: 'job-g05-en-001',
+    projectId: 'project-g05-en',
+    language: 'en',
+    renderer: {
+      name: 'remotion', compositionId: 'FlowBizVerticalShort',
+      width: 1080, height: 1920, fps: 30, durationInFrames: 1345,
+    },
+    inputs: {
+      audio: { path: `${inputRoot}/en-US.wav`, sha256: audioDigest },
+      captions: { path: `${inputRoot}/en-US.srt`, sha256: captionsDigest },
+    },
+    syntheticMediaDisclosure: 'AI-generated narration and visuals.',
+  });
+});
+
+const validRenderInput = () => {
+  const inputRoot = '/private/input/project-g05-th/job-g05-th-001';
+  return {
+    jobId: 'job-g05-th-001', projectId: 'project-g05-th', inputRoot,
+    language: 'th', durationSeconds: 44.8,
+    audio: { path: `${inputRoot}/th-TH.wav`, sha256: '1'.repeat(64) },
+    captions: { path: `${inputRoot}/th-TH.srt`, sha256: '2'.repeat(64) },
+    syntheticMediaDisclosure: 'AI-generated narration and visuals.',
+  };
+};
+
+test('render manifest rejects traversal arbitrary files and control characters', () => {
+  const valid = validRenderInput();
+  for (const input of [
+    { ...valid, audio: { ...valid.audio, path: `${valid.inputRoot}/../secret.wav` } },
+    { ...valid, captions: { ...valid.captions, path: `${valid.inputRoot}/nested/captions.srt` } },
+    { ...valid, audio: { ...valid.audio, path: '/etc/passwd' } },
+    { ...valid, inputRoot: `${valid.inputRoot}/..` },
+    { ...valid, audio: { ...valid.audio, path: `${valid.inputRoot}/bad\0.wav` } },
+    { ...valid, captions: { ...valid.captions, path: `${valid.inputRoot}/bad\n.srt` } },
+  ]) assert.equal(createRenderManifest(input).ok, false);
+});
+
+test('render manifest rejects invalid canonical IDs and cross-job roots', () => {
+  const valid = validRenderInput();
+  for (const input of [
+    { ...valid, jobId: '../job' },
+    { ...valid, jobId: 'Job-G05-TH-001' },
+    { ...valid, projectId: 'project g05 th' },
+    { ...valid, projectId: ' project-g05-th ' },
+    { ...valid, inputRoot: '/private/input/project-g05-th/job-other-001' },
+    { ...valid, inputRoot: '/private/input/project-other/job-g05-th-001' },
+  ]) assert.equal(createRenderManifest(input).ok, false);
+});
+
+test('render manifest preserves frame boundaries and rejects unsafe huge durations', () => {
+  const boundary = createRenderManifest({ ...validRenderInput(), durationSeconds: 31 / 30 });
+  assert.equal(boundary.ok, true);
+  assert.equal(boundary.manifest.renderer.durationInFrames, 31);
+  assert.equal(createRenderManifest({ ...validRenderInput(), durationSeconds: Number.MAX_VALUE }).ok, false);
+});
+
+test('render manifest rejects unbound or malformed runtime inputs', () => {
+  const valid = validRenderInput();
+  for (const input of [
+    { ...valid, inputRoot: undefined },
+    { ...valid, jobId: ' ' },
+    { ...valid, projectId: '' },
+    { ...valid, language: 'fr' },
+    { ...valid, durationSeconds: 0 },
+    { ...valid, audio: { ...valid.audio, path: 'relative.wav' } },
+    { ...valid, captions: { ...valid.captions, sha256: 'not-a-digest' } },
+    { ...valid, syntheticMediaDisclosure: '' },
+  ]) {
+    assert.doesNotThrow(() => createRenderManifest(input));
+    assert.equal(createRenderManifest(input).ok, false);
+  }
+});
 
 test('manual media evidence atomically replaces exact project artifacts and QA digests', () => {
   const workspace = migratedSeed();
