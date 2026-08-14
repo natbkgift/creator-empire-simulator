@@ -29,13 +29,13 @@ export const FlowBizVerticalShort: React.FC<FlowBizVerticalShortProps> = ({
 
   return (
     <AbsoluteFill style={{
-      background: 'linear-gradient(160deg, #081525 0%, #102f45 58%, #0a7f72 100%)',
+      background: 'linear-gradient(160deg, #081525 0%, #102f45 58%, #7c3aed 100%)',
       color: '#f8fafc',
       fontFamily,
       padding: '104px 76px 88px',
     }}>
       <Audio src={staticFile(audioFileName)} />
-      <div style={{ color: '#5eead4', fontSize: 38, fontWeight: 800, letterSpacing: 7 }}>FLOWBIZ</div>
+      <div style={{ color: '#22d3ee', fontSize: 38, fontWeight: 800, letterSpacing: 7 }}>FLOWBIZ</div>
       <div style={{ fontSize: 76, fontWeight: 900, lineHeight: 1.05, marginTop: 54, maxWidth: 900 }}>
         Creator Factory
       </div>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
-  access, mkdtemp, mkdir, readFile, rm, symlink, truncate, writeFile,
+  access, mkdtemp, mkdir, readFile, readdir, rm, symlink, truncate, writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -52,6 +52,15 @@ const fixture = async () => {
 const cleanupFixture = async (value, prepared) => {
   await prepared?.cleanup();
   await rm(value.temporaryRoot, { recursive: true, force: true });
+};
+
+const bundledText = async (directory) => {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const values = await Promise.all(entries.map(async (entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? bundledText(path) : readFile(path, 'utf8');
+  }));
+  return values.join('\n');
 };
 
 test('private render adapter stages and parses the exact verified bytes', async () => {
@@ -162,6 +171,9 @@ test('private render template bundles the pinned vertical composition from stage
     const serveUrl = await bundlePrivateTemplate(prepared.publicDir, bundlePath);
     assert.equal(serveUrl, bundlePath);
     await access(join(bundlePath, 'index.html'));
+    const source = await bundledText(bundlePath);
+    assert.match(source, /#22d3ee/i, 'bundled template must contain the Owner-required cyan brand token');
+    assert.match(source, /#7c3aed/i, 'bundled template must contain the Owner-required violet brand token');
   } finally {
     await cleanupFixture(value, prepared);
   }
