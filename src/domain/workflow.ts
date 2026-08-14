@@ -8,6 +8,7 @@ import type {
   WorkflowEvent,
   Workspace,
 } from './types.js';
+import { isValidReviewTimestamp } from './media-evidence.js';
 import { addDays, todayIso, uid } from './utils.js';
 
 export const workflowStatuses: ProjectStatus[] = [
@@ -71,6 +72,50 @@ export const workflowRecommendation = (_workspace: Workspace, project: VideoProj
 };
 
 export interface WorkflowReadiness { ready: boolean; completed: string[]; blockers: string[]; }
+
+export const mediaArtifactReadiness = (project: VideoProject): WorkflowReadiness => {
+  const completed: string[] = [];
+  const blockers: string[] = [];
+  const artifacts = Array.isArray(project.mediaArtifacts) ? project.mediaArtifacts : [];
+  const digestPattern = /^[a-f0-9]{64}$/i;
+  const reviewedDigests = new Map<string, string>();
+  for (const kind of ['voice', 'captions', 'render'] as const) {
+    const artifact = artifacts.find((candidate) =>
+      typeof candidate === 'object'
+      && candidate !== null
+      && candidate.projectId === project.id
+      && candidate.kind === kind
+      && candidate.status === 'reviewed'
+      && candidate.language === project.language
+      && typeof candidate.sha256 === 'string'
+      && digestPattern.test(candidate.sha256),
+    );
+    if (artifact) {
+      reviewedDigests.set(kind, artifact.sha256.toLowerCase());
+      completed.push(`${kind} artifact is reviewed and digest-bound to this project.`);
+    }
+    else blockers.push(`A reviewed ${kind} artifact with this project's language and SHA-256 digest is required.`);
+  }
+  const qa = project.mediaQa;
+  const requiredChecks = ['brand', 'duration', 'resolution', 'audio', 'captionSync', 'language'] as const;
+  const requiredArtifacts = ['voice', 'captions', 'render'] as const;
+  const qaChecksPass = qa && typeof qa.checks === 'object' && qa.checks !== null
+    && requiredChecks.every((key) => qa.checks[key] === true);
+  const qaBindsArtifacts = qa && typeof qa.artifactDigests === 'object' && qa.artifactDigests !== null
+    && requiredArtifacts.every((kind) =>
+      typeof qa.artifactDigests[kind] === 'string'
+      && qa.artifactDigests[kind].toLowerCase() === reviewedDigests.get(kind),
+    );
+  if (qa && qa.result === 'pass'
+    && isValidReviewTimestamp(qa.reviewedAt)
+    && typeof qa.reviewer === 'string' && Boolean(qa.reviewer.trim())
+    && qaChecksPass && qaBindsArtifacts) {
+    completed.push('Media QA records brand, duration, resolution, audio, caption sync, and language review.');
+  } else {
+    blockers.push('Passing media QA must bind the exact artifacts and record reviewer, time, brand, duration, resolution, audio, caption sync, and language checks.');
+  }
+  return { ready: blockers.length === 0, completed, blockers };
+};
 
 export const requiredPolicyChecks = [
   'originalScript', 'sourcesPresent', 'claimsClassified', 'aiDisclosureReviewed', 'musicLicensed', 'templateRiskReviewed',
@@ -198,6 +243,9 @@ export const workflowReadiness = (workspace: Workspace, project: VideoProject, t
       check(Boolean(project.policyChecks.templateRiskReviewed && hasPolicyEvidence(project, 'templateRiskReviewed')), 'Template differentiation evidence is saved.', 'The templateRiskReviewed check requires saved differentiation evidence.');
       check(conditionalReviewComplete(project, 'sensitiveContentReviewed'), 'Sensitive-content applicability and review decision is saved.', 'sensitiveContentReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
       check(conditionalReviewComplete(project, 'trademarkReviewed'), 'Trademark applicability and review decision is saved.', 'trademarkReviewed requires an applicable: or not-applicable: evidence decision; applicable decisions also require the review checkbox.');
+      const media = mediaArtifactReadiness(project);
+      completed.push(...media.completed);
+      blockers.push(...media.blockers);
       [...new Set(project.platforms.flatMap(policyPlatforms))]
         .forEach((platform) => check(
           hasCurrentPolicyRecord(workspace, platform),

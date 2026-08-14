@@ -11,11 +11,13 @@ import { applyChannelFocus, applyPortfolioFocus, applyProjectFocus, focusedChann
 import {
   buildWorkflowTasks, promptCompletionStatus, rebuildWorkflowTasks, rescheduleProjectWorkflow,
   requiredPolicyChecks, isProductionComplete, syncNextWorkflowMission, taskIsUnlocked,
-  policyRiskLevel, workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
+  mediaArtifactReadiness, policyRiskLevel, workflowReadiness, workflowRecommendation, workflowStatuses, productionStatuses, growthStatuses,
 } from '../dist/src/domain/workflow.js';
 import { migrateWorkspace } from '../dist/src/domain/migration.js';
 import { aiWorkflowCoverage, promptResponseContracts } from '../dist/src/domain/ai-contracts.js';
 import { clearPendingRequest, clearRequestKey, getOrCreateRequestKey, loadPendingRequest, peekRequestKey, requestFingerprint, savePendingRequest } from '../dist/src/domain/request-idempotency.js';
+import { isValidReviewTimestamp, saveManualMediaEvidence } from '../dist/src/domain/media-evidence.js';
+import { createRenderManifest } from '../dist/src/domain/render-manifest.js';
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -25,6 +27,191 @@ const wojtekProjectId = 'project_wojtek_short';
 const aiProjectId = 'project_ai_boring_task';
 
 const migratedSeed = () => migrateWorkspace(createSeedWorkspace());
+
+const addReviewedMedia = (project) => {
+  const digest = 'a'.repeat(64);
+  project.mediaArtifacts = ['voice', 'captions', 'render'].map((kind) => ({
+    id: `${kind}-${project.id}`, projectId: project.id, kind, sha256: digest, status: 'reviewed',
+    language: project.language, createdAt: '2026-08-12T00:00:00Z',
+  }));
+  project.mediaQa = {
+    reviewedAt: '2026-08-12T00:10:00Z', reviewer: 'owner', result: 'pass',
+    artifactDigests: { voice: digest, captions: digest, render: digest },
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  };
+};
+
+test('render manifest binds one job to exact vertical audio captions and disclosure', () => {
+  const audioDigest = '1'.repeat(64);
+  const captionsDigest = '2'.repeat(64);
+  const inputRoot = '/private/input/project-g05-en/job-g05-en-001';
+  const result = createRenderManifest({
+    jobId: 'job-g05-en-001',
+    projectId: 'project-g05-en',
+    inputRoot,
+    language: 'en',
+    durationSeconds: 44.803,
+    audio: { path: `${inputRoot}/en-US.wav`, sha256: audioDigest },
+    captions: { path: `${inputRoot}/en-US.srt`, sha256: captionsDigest },
+    syntheticMediaDisclosure: 'AI-generated narration and visuals.',
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.manifest, {
+    schemaVersion: 1,
+    jobId: 'job-g05-en-001',
+    projectId: 'project-g05-en',
+    language: 'en',
+    renderer: {
+      name: 'remotion', compositionId: 'FlowBizVerticalShort',
+      width: 1080, height: 1920, fps: 30, durationInFrames: 1345,
+    },
+    inputs: {
+      audio: { path: `${inputRoot}/en-US.wav`, sha256: audioDigest },
+      captions: { path: `${inputRoot}/en-US.srt`, sha256: captionsDigest },
+    },
+    syntheticMediaDisclosure: 'AI-generated narration and visuals.',
+  });
+});
+
+const validRenderInput = () => {
+  const inputRoot = '/private/input/project-g05-th/job-g05-th-001';
+  return {
+    jobId: 'job-g05-th-001', projectId: 'project-g05-th', inputRoot,
+    language: 'th', durationSeconds: 44.8,
+    audio: { path: `${inputRoot}/th-TH.wav`, sha256: '1'.repeat(64) },
+    captions: { path: `${inputRoot}/th-TH.srt`, sha256: '2'.repeat(64) },
+    syntheticMediaDisclosure: 'AI-generated narration and visuals.',
+  };
+};
+
+test('render manifest rejects traversal arbitrary files and control characters', () => {
+  const valid = validRenderInput();
+  for (const input of [
+    { ...valid, audio: { ...valid.audio, path: `${valid.inputRoot}/../secret.wav` } },
+    { ...valid, captions: { ...valid.captions, path: `${valid.inputRoot}/nested/captions.srt` } },
+    { ...valid, audio: { ...valid.audio, path: '/etc/passwd' } },
+    { ...valid, inputRoot: `${valid.inputRoot}/..` },
+    { ...valid, audio: { ...valid.audio, path: `${valid.inputRoot}/bad\0.wav` } },
+    { ...valid, captions: { ...valid.captions, path: `${valid.inputRoot}/bad\n.srt` } },
+  ]) assert.equal(createRenderManifest(input).ok, false);
+});
+
+test('render manifest rejects invalid canonical IDs and cross-job roots', () => {
+  const valid = validRenderInput();
+  for (const input of [
+    { ...valid, jobId: '../job' },
+    { ...valid, jobId: 'Job-G05-TH-001' },
+    { ...valid, projectId: 'project g05 th' },
+    { ...valid, projectId: ' project-g05-th ' },
+    { ...valid, inputRoot: '/private/input/project-g05-th/job-other-001' },
+    { ...valid, inputRoot: '/private/input/project-other/job-g05-th-001' },
+  ]) assert.equal(createRenderManifest(input).ok, false);
+});
+
+test('render manifest preserves frame boundaries and rejects unsafe huge durations', () => {
+  const boundary = createRenderManifest({ ...validRenderInput(), durationSeconds: 31 / 30 });
+  assert.equal(boundary.ok, true);
+  assert.equal(boundary.manifest.renderer.durationInFrames, 31);
+  assert.equal(createRenderManifest({ ...validRenderInput(), durationSeconds: Number.MAX_VALUE }).ok, false);
+});
+
+test('render manifest rejects unbound or malformed runtime inputs', () => {
+  const valid = validRenderInput();
+  for (const input of [
+    { ...valid, inputRoot: undefined },
+    { ...valid, jobId: ' ' },
+    { ...valid, projectId: '' },
+    { ...valid, language: 'fr' },
+    { ...valid, durationSeconds: 0 },
+    { ...valid, audio: { ...valid.audio, path: 'relative.wav' } },
+    { ...valid, captions: { ...valid.captions, sha256: 'not-a-digest' } },
+    { ...valid, syntheticMediaDisclosure: '' },
+  ]) {
+    assert.doesNotThrow(() => createRenderManifest(input));
+    assert.equal(createRenderManifest(input).ok, false);
+  }
+});
+
+test('manual media evidence atomically replaces exact project artifacts and QA digests', () => {
+  const workspace = migratedSeed();
+  const project = workspace.projects[0];
+  const digests = { voice: '1'.repeat(64), captions: '2'.repeat(64), render: '3'.repeat(64) };
+  const result = saveManualMediaEvidence(project, {
+    filenames: { voice: 'voice-th.wav', captions: 'captions-th.srt', render: 'render-th.mp4' },
+    digests,
+    reviewer: 'Nat', reviewedAt: '2026-08-12T02:00:00.000Z',
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(project.mediaArtifacts.map(({ kind, sha256, status, language, source }) => ({ kind, sha256, status, language, source })), [
+    { kind: 'voice', sha256: digests.voice, status: 'reviewed', language: project.language, source: 'manual' },
+    { kind: 'captions', sha256: digests.captions, status: 'reviewed', language: project.language, source: 'manual' },
+    { kind: 'render', sha256: digests.render, status: 'reviewed', language: project.language, source: 'manual' },
+  ]);
+  assert.deepEqual(project.mediaQa.artifactDigests, digests);
+  assert.equal(project.mediaQa.result, 'pass');
+});
+
+test('manual media evidence rejects malformed digests without mutating the project', () => {
+  const project = migratedSeed().projects[0];
+  const before = structuredClone(project);
+  const result = saveManualMediaEvidence(project, {
+    filenames: { voice: 'voice.wav', captions: 'captions.srt', render: 'render.mp4' },
+    digests: { voice: 'not-a-digest', captions: '2'.repeat(64), render: '3'.repeat(64) },
+    reviewer: 'Nat', reviewedAt: '2026-08-12T02:00:00.000Z',
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(project, before);
+});
+
+test('manual media evidence rejects malformed runtime fields, partial checks, and invalid review time', () => {
+  const valid = {
+    filenames: { voice: 'voice.wav', captions: 'captions.srt', render: 'render.mp4' },
+    digests: { voice: '1'.repeat(64), captions: '2'.repeat(64), render: '3'.repeat(64) },
+    reviewer: 'Nat', reviewedAt: '2026-08-12T02:00:00.000Z',
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  };
+  for (const input of [
+    { ...valid, filenames: { ...valid.filenames, voice: undefined } },
+    { ...valid, digests: { ...valid.digests, render: null } },
+    { ...valid, checks: { brand: true } },
+    { ...valid, reviewedAt: 'not-a-date' },
+    { ...valid, reviewedAt: '2026-02-30T00:00' },
+    { ...valid, reviewedAt: '0' },
+  ]) {
+    const project = migratedSeed().projects[0];
+    const before = structuredClone(project);
+    assert.doesNotThrow(() => saveManualMediaEvidence(project, input));
+    assert.equal(saveManualMediaEvidence(project, input).ok, false);
+    assert.deepEqual(project, before);
+  }
+});
+
+test('review timestamps require strict real ISO calendar datetimes', () => {
+  assert.equal(isValidReviewTimestamp('2026-08-12T02:00'), true);
+  assert.equal(isValidReviewTimestamp('2026-08-12T02:00:00.000Z'), true);
+  assert.equal(isValidReviewTimestamp('2026-08-12T02:00:00+07:00'), true);
+  assert.equal(isValidReviewTimestamp('2026-02-30T00:00'), false);
+  assert.equal(isValidReviewTimestamp('0'), false);
+});
+
+test('media readiness rejects malformed persisted QA review timestamps', () => {
+  const project = migratedSeed().projects[0];
+  addReviewedMedia(project);
+  project.mediaQa.reviewedAt = 'not-a-date';
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.reviewedAt = '2026-02-30T00:00';
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+});
+
+test('media evidence form preflights validation before opening a persistent workspace update', () => {
+  const source = readFileSync(new URL('../src/features/pipeline.ts', import.meta.url), 'utf8');
+  const handler = source.slice(source.indexOf("dialog.querySelector<HTMLFormElement>('#project-media-evidence')"), source.indexOf('\n};\n\nconst projectDate'));
+  assert.ok(handler.indexOf('saveManualMediaEvidence(structuredClone(project)') > 0);
+  assert.ok(handler.indexOf('saveManualMediaEvidence(structuredClone(project)') < handler.indexOf('updateWorkspace'));
+});
 
 test('request keys survive ambiguous retries and clear only after reconciliation', () => {
   const values = new Map();
@@ -275,6 +462,7 @@ test('evidence gate rejects dangling source IDs and incomplete provenance', () =
 
 test('release gate requires every mandatory policy check, not arbitrary 6/8', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -301,6 +489,7 @@ test('release gate requires every mandatory policy check, not arbitrary 6/8', ()
 
 test('release gate does not trust source and claim checkboxes without supporting artifacts', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -337,6 +526,7 @@ test('release gate does not trust source and claim checkboxes without supporting
 
 test('release gate requires a saved project disclosure decision for the AI review checkbox', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     musicLicensed: 'Licensed music and footage recorded in the project rights log.',
@@ -356,6 +546,7 @@ test('release gate requires a saved project disclosure decision for the AI revie
 
 test('release gate requires saved project differentiation evidence for the template review checkbox', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -375,6 +566,7 @@ test('release gate requires saved project differentiation evidence for the templ
 
 test('release gate requires explicit applicable or not-applicable decisions for conditional reviews', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -400,6 +592,7 @@ test('release gate requires explicit applicable or not-applicable decisions for 
 
 test('release gate requires current sourced active policy records for every target platform', () => {
   const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  addReviewedMedia(project);
   project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
   project.policyEvidence = {
     aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
@@ -467,6 +660,64 @@ test('CapCut Draft cannot advance to Editing until cost ledger exists', () => {
   workspace.credits = workspace.credits.filter((entry) => entry.projectId !== project.id); assert.equal(workflowReadiness(workspace, project, 'editing').ready, false);
   workspace.credits.push({ id:'credit_test', projectId:project.id, channelId:project.channelId, createdAt:new Date().toISOString(), balanceBefore:100,balanceAfter:90,tool:'video-clip',mode:'standard',model:'Test',durationSeconds:5,resolution:'720p',soundEnabled:false,generations:1,regenerations:0,usableOutputs:1,completedVideo:false,visualStyle:'Documentary',notes:'' });
   assert.equal(workflowReadiness(workspace, project, 'editing').ready, true);
+});
+
+test('media artifact readiness requires project-scoped reviewed voice captions render and QA evidence', () => {
+  const project = structuredClone(migratedSeed().projects[0]);
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  assert.match(mediaArtifactReadiness(project).blockers.join(' '), /voice/i);
+
+  const artifact = (kind, language = project.language) => ({
+    id: `${kind}-1`, projectId: project.id, kind, sha256: 'a'.repeat(64), status: 'reviewed', language,
+    createdAt: '2026-08-12T00:00:00Z',
+  });
+  project.mediaArtifacts = [artifact('voice'), artifact('captions'), artifact('render')];
+  project.mediaQa = {
+    reviewedAt: '2026-08-12T00:10:00Z', reviewer: 'owner', result: 'pass',
+    artifactDigests: { voice: 'a'.repeat(64), captions: 'a'.repeat(64), render: 'a'.repeat(64) },
+    checks: { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true },
+  };
+  assert.equal(mediaArtifactReadiness(project).ready, true);
+
+  project.mediaArtifacts[2].projectId = 'other-project';
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaArtifacts[2] = artifact('render');
+  project.mediaArtifacts[1].sha256 = 'not-a-digest';
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaArtifacts[1] = artifact('captions', project.language === 'en' ? 'th' : 'en');
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaArtifacts[1] = artifact('captions');
+  project.mediaQa.checks.captionSync = false;
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.checks.captionSync = true;
+  project.mediaQa.checks = null;
+  assert.doesNotThrow(() => mediaArtifactReadiness(project));
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.checks = { a: true, b: true, c: true, d: true, e: true, f: true };
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.reviewedAt = 7;
+  assert.doesNotThrow(() => mediaArtifactReadiness(project));
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+  project.mediaQa.reviewedAt = '2026-08-12T00:10:00Z';
+  project.mediaQa.checks = { brand: true, duration: true, resolution: true, audio: true, captionSync: true, language: true };
+  project.mediaQa.artifactDigests.render = 'b'.repeat(64);
+  assert.equal(mediaArtifactReadiness(project).ready, false);
+});
+
+test('scheduled release is blocked until exact reviewed media artifacts and QA are present', () => {
+  const workspace = migratedSeed(); const project = structuredClone(workspace.projects[0]); project.status='qa'; project.riskLevel='low';
+  project.policyChecks = Object.fromEntries(requiredPolicyChecks.map((key) => [key, true]));
+  project.policyEvidence = {
+    aiDisclosureReviewed: 'Reviewed the final edit; no realistic synthetic reconstruction is present.',
+    musicLicensed: 'Licensed music and footage recorded in the project rights log.',
+    sensitiveContentReviewed: 'not-applicable: no sensitive content appears.',
+    templateRiskReviewed: 'Compared with the last five channel videos; opening, scene order, and visual treatment are distinct.',
+    trademarkReviewed: 'not-applicable: no trademarked material appears.',
+  };
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, false);
+  assert.match(workflowReadiness(workspace, project, 'scheduled').blockers.join(' '), /reviewed voice artifact/i);
+  addReviewedMedia(project);
+  assert.equal(workflowReadiness(workspace, project, 'scheduled').ready, true);
 });
 
 let passed=0;

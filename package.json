@@ -7,12 +7,14 @@
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "build": "npm run clean && tsc -p tsconfig.json && node scripts/copy-static.mjs",
-    "test": "npm run build && node tests/domain-tests.mjs && node tests/ui-tests.mjs",
+    "test": "npm run build && node tests/domain-tests.mjs && node tests/ui-tests.mjs && node tests/render-adapter-tests.mjs",
     "test:domain": "node tests/domain-tests.mjs",
     "test:ui": "node tests/ui-tests.mjs",
+    "test:render-adapter": "node tests/render-adapter-tests.mjs",
     "test:server": "python tests/server-v1.3.py",
     "test:ai-live": "node scripts/ai-live-coverage.mjs",
-    "check": "tsc --noEmit -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json && npm run check:render",
+    "check:render": "tsc --noEmit -p tsconfig.render.json",
     "dev": "npm run build && http-server dist -p 4173 -c-1",
     "preview": "http-server dist -p 4173 -c-1",
     "start": "python3 creator_server.py --root dist --port 4173 --host 127.0.0.1",
@@ -22,12 +24,22 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "http-server": "14.1.1",
     "typescript": "5.8.3"
   },
   "dependencies": {
+    "@remotion/bundler": "4.0.509",
+    "@remotion/renderer": "4.0.509",
     "postcss": "^8.5.26",
     "postcss-nested": "^8.0.1",
-    "postcss-scss": "^4.0.9"
+    "postcss-scss": "^4.0.9",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.509"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }

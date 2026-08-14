@@ -6,6 +6,7 @@ import { getWorkspace, updateWorkspace } from '../app/store.js';
 import { activeChannel, activeProject, statusLabels } from '../app/selectors.js';
 import { applyChannelFocus, applyProjectFocus } from '../domain/focus.js';
 import { isProductionComplete } from '../domain/workflow.js';
+import { saveManualMediaEvidence } from '../domain/media-evidence.js';
 import { escapeHtml, todayIso } from '../domain/utils.js';
 import { button, chip, dataBadge, metric, pageHeader } from '../ui/components.js';
 import { openDialog, showToast } from '../ui/feedback.js';
@@ -33,6 +34,22 @@ let languageFilter = 'all';
 let formatFilter = 'all';
 
 const projectGroup = (status: ProjectStatus): StageGroup => stageGroups.find((group) => group.statuses.includes(status)) ?? stageGroups[0];
+
+const mediaKinds = ['voice', 'captions', 'render'] as const;
+const mediaLabels = { voice: 'Voice', captions: 'Captions', render: 'Render' } as const;
+
+export const mediaEvidenceForm = (project: VideoProject): string => {
+  const artifactInput = mediaKinds.map((kind) => {
+    const artifact = project.mediaArtifacts?.find((item) => item.kind === kind && item.projectId === project.id);
+    return `<fieldset><legend>${mediaLabels[kind]}</legend><div class="field"><label>Filename</label><input class="input" name="${kind}Filename" maxlength="255" required value="${escapeHtml(artifact?.filename ?? '')}"></div><div class="field"><label>SHA-256</label><input class="input" name="${kind}Sha256" minlength="64" maxlength="64" pattern="[A-Fa-f0-9]{64}" required value="${escapeHtml(artifact?.sha256 ?? '')}"></div></fieldset>`;
+  }).join('');
+  const checks = [
+    ['qaBrand', 'brand', 'Brand template'], ['qaDuration', 'duration', 'Duration'],
+    ['qaResolution', 'resolution', 'Resolution'], ['qaAudio', 'audio', 'Audio'],
+    ['qaCaptionSync', 'captionSync', 'Caption sync'], ['qaLanguage', 'language', 'Language'],
+  ] as const;
+  return `<form id="project-media-evidence" class="stack"><input type="hidden" name="projectId" value="${escapeHtml(project.id)}"><p class="sub">Manual evidence only. Enter metadata for files already produced and independently hash-verified; this form does not invoke a provider.</p><div class="form-grid">${artifactInput}</div><div class="form-grid two"><div class="field"><label>Reviewer</label><input class="input" name="reviewer" maxlength="120" required value="${escapeHtml(project.mediaQa?.reviewer ?? '')}"></div><div class="field"><label>Reviewed at</label><input class="input" type="datetime-local" name="reviewedAt" required value="${escapeHtml(project.mediaQa?.reviewedAt?.slice(0, 16) ?? '')}"></div></div><div class="check-grid">${checks.map(([name, key, label]) => `<label><input type="checkbox" name="${name}" ${project.mediaQa?.checks[key] ? 'checked' : ''}> ${label}</label>`).join('')}</div><div class="dialog-actions"><button class="btn primary" type="submit">Save exact media evidence</button></div></form>`;
+};
 
 const projectCard = (project: VideoProject, activeId?: string): string => {
   const workspace = getWorkspace();
@@ -65,7 +82,8 @@ const projectDialog = (project: VideoProject): void => {
   const body = `<div class="context-project-summary"><span class="kicker">${escapeHtml(channel?.name ?? 'Unassigned')} · ${escapeHtml(projectGroup(project.status).label)}</span><h3>${escapeHtml(project.title)}</h3><div class="row wrap">${chip(statusLabels[project.status], complete ? 'green' : 'violet')}${chip(project.format === 'long' ? 'Long-form' : 'Shorts', project.format === 'long' ? 'amber' : 'cyan')}${complete ? chip('Video Complete', 'green') : ''}</div></div>
     <div class="context-project-grid"><div><span>Publish</span><b>${escapeHtml((project.publishAt ?? project.deadline).replace('T', ' '))}</b></div><div><span>Risk</span><b>${escapeHtml(project.riskLevel)}</b></div><div><span>Credits</span><b>${project.actualCredits || `${project.creditEstimateLow}–${project.creditEstimateHigh}`}</b></div></div>
     ${complete ? `<div class="video-complete-panel"><strong>Production finished</strong><span>Growth work is now separate from production completion.</span>${project.publicationLinks[0] ? `<a href="${escapeHtml(project.publicationLinks[0])}" target="_blank" rel="noreferrer">Open publication →</a>` : ''}</div>` : `<div class="recommended-tool"><span>RECOMMENDED NOW</span><strong>${recommendedLabel}</strong><p>Open the stage-specific workspace with this video already selected.</p></div>`}
-    <div class="context-tool-actions"><button class="btn primary" data-context-route="${recommendedRoute}">${recommendedLabel}</button><button class="btn" data-context-route="mission">Mission</button><button class="btn" data-context-route="calendar">Calendar</button><button class="btn" data-context-route="prompts">Prompt Studio</button><button class="btn" data-context-route="capcut">CapCut Lab</button><button class="btn" data-context-route="policy">Policy Shield</button></div>`;
+    <div class="context-tool-actions"><button class="btn primary" data-context-route="${recommendedRoute}">${recommendedLabel}</button><button class="btn" data-context-route="mission">Mission</button><button class="btn" data-context-route="calendar">Calendar</button><button class="btn" data-context-route="prompts">Prompt Studio</button><button class="btn" data-context-route="capcut">CapCut Lab</button><button class="btn" data-context-route="policy">Policy Shield</button></div>
+    ${mediaEvidenceForm(project)}`;
   const dialog = openDialog(project.title, body, 'lg');
   dialog.querySelectorAll<HTMLElement>('[data-context-route]').forEach((control) => control.addEventListener('click', () => {
     const route = control.dataset.contextRoute;
@@ -74,6 +92,31 @@ const projectDialog = (project: VideoProject): void => {
     dialog.close();
     navigate(route, { project: project.id });
   }));
+  dialog.querySelector<HTMLFormElement>('#project-media-evidence')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget as HTMLFormElement);
+    const value = (name: string): string => String(data.get(name) ?? '');
+    const input = {
+      filenames: { voice: value('voiceFilename'), captions: value('captionsFilename'), render: value('renderFilename') },
+      digests: { voice: value('voiceSha256'), captions: value('captionsSha256'), render: value('renderSha256') },
+      reviewer: value('reviewer'), reviewedAt: value('reviewedAt'),
+      checks: {
+        brand: data.get('qaBrand') === 'on', duration: data.get('qaDuration') === 'on',
+        resolution: data.get('qaResolution') === 'on', audio: data.get('qaAudio') === 'on',
+        captionSync: data.get('qaCaptionSync') === 'on', language: data.get('qaLanguage') === 'on',
+      },
+    };
+    const validation = saveManualMediaEvidence(structuredClone(project), input);
+    if (validation.ok === false) { showToast(validation.error, 'warning'); return; }
+    updateWorkspace((draft) => {
+      const target = draft.projects.find((item) => item.id === project.id);
+      if (!target) return;
+      saveManualMediaEvidence(target, input);
+    });
+    dialog.close();
+    showToast('Saved exact project media artifacts and digest-bound QA evidence.', 'success');
+    requestRender();
+  });
 };
 
 const projectDate = (days: number): string => {
