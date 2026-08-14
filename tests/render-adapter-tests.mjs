@@ -176,6 +176,11 @@ test('private render template bundles the pinned vertical composition from stage
     const source = await bundledText(bundlePath);
     assert.match(source, /#22d3ee/i, 'bundled template must contain the Owner-required cyan brand token');
     assert.match(source, /#7c3aed/i, 'bundled template must contain the Owner-required violet brand token');
+    assert.match(
+      source,
+      /FlowBiz AI Content Operations/,
+      'bundled template must contain the Owner-required public presentation title',
+    );
   } finally {
     await cleanupFixture(value, prepared);
   }

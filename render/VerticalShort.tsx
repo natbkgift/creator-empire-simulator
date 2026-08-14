@@ -21,7 +21,6 @@ export const FlowBizVerticalShort: React.FC<FlowBizVerticalShortProps> = ({
   captions,
   disclosure,
   language,
-  projectId,
 }) => {
   const frame = useCurrentFrame();
   const caption = captions.find((item) => frame >= item.startFrame && frame < item.endFrame);
@@ -39,7 +38,7 @@ export const FlowBizVerticalShort: React.FC<FlowBizVerticalShortProps> = ({
       <div style={{ fontSize: 76, fontWeight: 900, lineHeight: 1.05, marginTop: 54, maxWidth: 900 }}>
         Creator Factory
       </div>
-      <div style={{ color: '#a7f3d0', fontSize: 30, marginTop: 22 }}>{projectId}</div>
+      <div style={{ color: '#a7f3d0', fontSize: 30, marginTop: 22 }}>FlowBiz AI Content Operations</div>
       <div style={{ flex: 1 }} />
       <div style={{
         alignItems: 'center',
