@@ -9,6 +9,7 @@ import {
   bundlePrivateTemplate,
   finishRenderCleanup,
   PRIVATE_RENDER_CONCURRENCY,
+  PRIVATE_RENDER_DISALLOW_PARALLEL_ENCODING,
   prepareRenderJob,
   publishOutputNoClobber,
   renderPrivate,
@@ -239,6 +240,10 @@ test('private render command fails closed for non-MP4 output', async () => {
 
 test('private render concurrency is fixed at one browser renderer', () => {
   assert.equal(PRIVATE_RENDER_CONCURRENCY, 1);
+});
+
+test('private render does not encode while rendering frames', () => {
+  assert.equal(PRIVATE_RENDER_DISALLOW_PARALLEL_ENCODING, true);
 });
 
 let passed = 0;

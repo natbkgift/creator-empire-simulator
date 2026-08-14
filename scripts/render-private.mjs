@@ -18,6 +18,7 @@ const MAX_CAPTION_BYTES = 2 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const READ_CHUNK_BYTES = 64 * 1024;
 export const PRIVATE_RENDER_CONCURRENCY = 1;
+export const PRIVATE_RENDER_DISALLOW_PARALLEL_ENCODING = true;
 
 const hashFile = async (path) => new Promise((resolveHash, reject) => {
   const hash = createHash('sha256');
@@ -234,6 +235,7 @@ export const renderPrivate = async (manifestPath, outputPath) => {
       codec: 'h264',
       audioCodec: 'aac',
       concurrency: PRIVATE_RENDER_CONCURRENCY,
+      disallowParallelEncoding: PRIVATE_RENDER_DISALLOW_PARALLEL_ENCODING,
       outputLocation: temporaryOutput,
       inputProps,
       logLevel: 'warn',
