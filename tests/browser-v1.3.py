@@ -87,7 +87,7 @@ def main() -> None:
         record("seed workspace persisted", saved is not None)
         workspace = saved["workspace"]
         workspace["settings"]["onboardingComplete"] = True
-        api("/api/workspace", "PUT", {"workspace": workspace})
+        api("/api/workspace", "PUT", {"workspace": workspace, "expectedRevision": workspace["revision"]})
         # Reload the document so the in-memory store reconciles the API update before changing only the hash route.
         page.reload(wait_until="domcontentloaded")
         page.goto(f"{BASE_URL}/#/hq", wait_until="domcontentloaded")
@@ -125,11 +125,12 @@ def main() -> None:
         wait_app(page)
         reconciled = api("/api/workspace")
         record("newer IndexedDB revision reconciles into SQLite", reconciled["workspace"]["name"] == "IDB newer recovery marker")
-        record("reconciled revision is monotonic", int(reconciled["storage"]["revision"]) >= server_revision + 5)
+        record("reconciled revision is monotonic", int(reconciled["storage"]["revision"]) == server_revision + 1)
 
-        # Equal-revision tie: updatedAt is the tie-breaker and must also reconcile, not merely render from cache.
+        # Equal-revision tie: SQLite remains authoritative even when the IndexedDB timestamp is newer.
         tie = api("/api/workspace")
         tie_copy = tie["workspace"]
+        sqlite_name = tie_copy["name"]
         tie_copy["revision"] = int(tie["storage"]["revision"])
         tie_copy["name"] = "IDB equal-revision newer-time marker"
         tie_copy["updatedAt"] = "2099-01-15T00:00:00.000Z"
@@ -137,7 +138,7 @@ def main() -> None:
         page.reload(wait_until="domcontentloaded")
         wait_app(page)
         tie_reconciled = api("/api/workspace")
-        record("equal revision uses newer updatedAt and reconciles durably", tie_reconciled["workspace"]["name"] == "IDB equal-revision newer-time marker")
+        record("SQLite remains authoritative on an equal-revision tie", tie_reconciled["workspace"]["name"] == sqlite_name)
 
         # SQLite outage: abort workspace API so bootstrap must use IndexedDB. Then reconnect and verify recovery.
         page.route("**/api/workspace", lambda route: route.abort())
